@@ -110,13 +110,21 @@ uint8_t updl_average_pooling_2d(updl_layer_t *layer, updl_exec_layer_t *exec_lay
 uint8_t updl_l2_norm(updl_layer_t *layer, updl_exec_layer_t *exec_layer);
 
 /**
+ * @brief Execute Add layer
+ * @param[in] layer      Layer configuration
+ * @param[in] exec_layer Layer execution context
+ * @return Status code (0 = success)
+ */
+uint8_t updl_add(updl_layer_t *layer, updl_exec_layer_t *exec_layer);
+
+/**
  * @brief Execute Softmax layer
  * @param[in] executor   Model executor context
  * @param[in] layer      Layer configuration
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_softmax(updl_executor_t *executor, updl_layer_t *layer, 
+uint8_t updl_softmax(updl_executor_t *executor, updl_layer_t *layer,
                      updl_exec_layer_t *exec_layer);
 
 // ============================================================================

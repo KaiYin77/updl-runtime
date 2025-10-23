@@ -385,6 +385,9 @@ int updl_execute(updl_executor_t *executor, const void *input, void *output) {
     case Ltype_lambda:
       result = updl_l2_norm(layer, exec_layer);
       break;
+    case Ltype_add:
+      result = updl_add(layer, exec_layer);
+      break;
     case Ltype_softmax:
       result = updl_softmax(executor, layer, exec_layer);
       break;

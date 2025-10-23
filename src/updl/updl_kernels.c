@@ -301,6 +301,43 @@ uint8_t updl_l2_norm(updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
 }
 
 /**
+ * @brief Add layer implementation
+ * Element-wise addition with broadcast support for bias-like operations
+ */
+uint8_t updl_add(updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+    if (layer->type != Ltype_add)
+        return 1;
+
+    int16_t *input = (int16_t *)exec_layer->input_ptr;
+    int16_t *output = (int16_t *)exec_layer->output_ptr;
+    int16_t *bias = layer->bias.weight;
+
+    uint32_t total_size = exec_layer->input_size;
+
+    // Simple element-wise addition with bias
+    // For Add operations, the "bias" contains the second input tensor
+    if (bias != NULL) {
+        // Element-wise addition with broadcast
+        for (uint32_t i = 0; i < total_size; i++) {
+            // Bias broadcast: if bias has fewer elements, repeat pattern
+            uint32_t bias_idx = (exec_layer->bias_size > 0) ? (i % exec_layer->bias_size) : 0;
+            int32_t result = (int32_t)input[i] + (int32_t)bias[bias_idx];
+
+            // Simple clamping to int16 range
+            if (result > 32767) result = 32767;
+            if (result < -32768) result = -32768;
+
+            output[i] = (int16_t)result;
+        }
+    } else {
+        // No second input - just copy input to output
+        memcpy(output, input, total_size * sizeof(int16_t));
+    }
+
+    return 0;
+}
+
+/**
  * @brief Softmax layer implementation using modular functions
  */
 uint8_t updl_softmax(updl_executor_t *executor, updl_layer_t *layer, updl_exec_layer_t *exec_layer) {

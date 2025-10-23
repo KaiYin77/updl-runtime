@@ -68,6 +68,7 @@ typedef enum ltype_t {
   Ltype_dense,
   Ltype_flatten,
   Ltype_lambda,
+  Ltype_add,
   Ltype_softmax,
 } ltype_t;
 
