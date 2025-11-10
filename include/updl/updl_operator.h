@@ -34,6 +34,11 @@ typedef enum rstate_t {
   rstate_running_hard, // busy executing
 } rstate_t;
 
+// Layer output callback (for testing/debugging)
+// Called after each layer completes, before buffer swap
+typedef void (*updl_layer_callback_t)(uint16_t layer_idx, const int16_t *output,
+                                      size_t output_size, void *user_data);
+
 // Execution layer context (streamlined)
 typedef struct updl_exec_layer_t {
   uint16_t *input_ptr;  // Points to working buffer (input data)
@@ -57,6 +62,10 @@ struct updl_executor_t {
   updl_memory_pool_t *memory_pool; // Memory management
   rstate_t state;                  // Current execution state
   uint16_t current_layer;          // Current layer being processed
+
+  // Debug/testing callback (optional)
+  updl_layer_callback_t layer_callback; // Called after each layer completes
+  void *callback_user_data;             // User data passed to callback
 };
 
 // ============================================================================
@@ -69,6 +78,11 @@ updl_executor_t *updl_create_executor(const updl_model_t *model,
 void updl_free_executor(updl_executor_t *executor);
 
 // Inference functions
-int32_t updl_execute(updl_executor_t *executor, const void *input, void *output);
+int32_t updl_execute(updl_executor_t *executor, const void *input,
+                     void *output);
+
+// Callback registration (for testing/debugging)
+void updl_set_layer_callback(updl_executor_t *executor,
+                             updl_layer_callback_t callback, void *user_data);
 
 #endif // UPDL_OPERATOR_H
