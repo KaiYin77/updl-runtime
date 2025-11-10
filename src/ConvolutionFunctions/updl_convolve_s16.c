@@ -147,7 +147,7 @@ uint8_t updl_convolve_64x1x1x64_s16_64x25x5(int16_t *input, int16_t *output, int
             const int16_t *wgt1_ptr = weight_ch1;
 
             // CHW input layout: process all channels for these two pixels
-            for (int32_t ch = 0; ch < input_channels; ch++) {
+            for (int32_t ch = 0; ch < (int32_t) input_channels; ch++) {
                 // CHW input indexing: input[ch][y][x] = input[ch * 125 + y*5 + x]
                 int32_t inp0_val = (int32_t)input[ch * num_pixels + pixel_idx0] - input_zp;
                 int32_t inp1_val = (int32_t)input[ch * num_pixels + pixel_idx1] - input_zp;
@@ -184,7 +184,7 @@ uint8_t updl_convolve_64x1x1x64_s16_64x25x5(int16_t *input, int16_t *output, int
             const int16_t *wgt1_ptr = weight_ch1;
 
             // CHW input layout: process all channels for the last pixel
-            for (int32_t ch = 0; ch < input_channels; ch++) {
+            for (int32_t ch = 0; ch < (int32_t) input_channels; ch++) {
                 // CHW input indexing: input[ch][last_pixel]
                 int32_t inp = (int32_t)input[ch * num_pixels + last_pixel_idx] - input_zp;
                 int32_t w0 = (int32_t)(*wgt0_ptr++) - (int32_t)weight_zp;

@@ -65,7 +65,7 @@
 // FORWARD DECLARATIONS
 // ============================================================================
 
-typedef struct updl_context_t updl_context_t;
+// typedef struct updl_context_t updl_context_t; // Removed - defined below in this file
 struct updl_model_t; // Forward declaration
 
 // ============================================================================
@@ -109,7 +109,7 @@ updl_memory_pool_t* updl_create_memory_pool(uint8_t *memory, size_t total_size, 
 void updl_reset_memory_pool(updl_memory_pool_t *pool);
 
 // Stream buffer management functions
-int updl_ensure_buffer_capacity(updl_memory_pool_t *pool, size_t input_size, size_t output_size);
+int32_t updl_ensure_buffer_capacity(updl_memory_pool_t *pool, size_t input_size, size_t output_size);
 void updl_swap_stream_buffers(updl_memory_pool_t *pool);
 uint8_t* updl_get_input_buffer(updl_memory_pool_t *pool);
 uint8_t* updl_get_output_buffer(updl_memory_pool_t *pool);
@@ -119,7 +119,7 @@ uint8_t* updl_get_output_buffer(updl_memory_pool_t *pool);
 typedef struct updl_executor_t updl_executor_t;
 
 // Executor recovery functions
-int updl_reset_executor(updl_executor_t *executor);
+int32_t updl_reset_executor(updl_executor_t *executor);
 
 // Profiling functions
 uint32_t updl_get_current_ticks(void);

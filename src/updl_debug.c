@@ -39,10 +39,10 @@ void updl_print_1d_array(const char *name, const int16_t *data, size_t size,
         float dequant_value = scale * ((float)data[i] - (float)zero_point);
         updl_Info2("%.3f", dequant_value);
         
-        if (i < size - 1) updl_Info2(", ");
-        if ((i + 1) % elements_per_line == 0) updl_Info2("\n");
+        if (i < size - 1) updl_Info2("%s", ", ");
+        if ((i + 1) % elements_per_line == 0) updl_Info2("%s", "\n");
     }
-    updl_Info2("]\n");
+    updl_Info2("%s", "]\n");
 }
 
 void updl_print_2d_array(const char *name, const int16_t *data, 
@@ -58,21 +58,21 @@ void updl_print_2d_array(const char *name, const int16_t *data,
     updl_Info("%s[C=0:%d][H=0:%d][W=0:%d]=[\n", name, channels_to_print, height, width);
     
     for (size_t c = 0; c < channels_to_print; c++) {
-        updl_Info2("[ ");
+        updl_Info2("%s", "[ ");
         for (size_t h = 0; h < height; h++) {
-            updl_Info2("[ ");
+            updl_Info2("%s", "[ ");
             for (size_t w = 0; w < width; w++) {
                 size_t index = c * height * width + h * width + w;
                 // Dequantize: value = scale * (quantized_value - zero_point)
                 float dequant_value = scale * ((float)data[index] - (float)zero_point);
                 updl_Info2("%.3f", dequant_value);
-                if (w < width - 1) updl_Info2(", ");
+                if (w < width - 1) updl_Info2("%s", ", ");
             }
-            updl_Info2("],\n");
+            updl_Info2("%s", "],\n");
         }
-        if (c < channels_to_print - 1) updl_Info2("], \n");
+        if (c < channels_to_print - 1) updl_Info2("%s", "], \n");
     }
-    updl_Info2("]\n");
+    updl_Info2("%s", "]\n");
 }
 
 void updl_print_layer_metadata(size_t layer_index, const updl_layer_t *layer) {

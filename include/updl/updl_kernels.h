@@ -38,8 +38,8 @@ extern "C" {
 // FORWARD DECLARATIONS
 // ============================================================================
 
-typedef struct updl_executor_t updl_executor_t;
-typedef struct updl_exec_layer_t updl_exec_layer_t;
+// typedef struct updl_executor_t updl_executor_t; // Removed - defined in updl_operator.h (included via updl_interpreter.h)
+// typedef struct updl_exec_layer_t updl_exec_layer_t; // Removed - defined in updl_operator.h (included via updl_kernels_support.h)
 
 // ============================================================================
 // HIGH-LEVEL LAYER EXECUTION INTERFACE
@@ -52,7 +52,7 @@ typedef struct updl_exec_layer_t updl_exec_layer_t;
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_conv_1d(updl_executor_t *executor, updl_layer_t *layer, 
+uint8_t updl_conv_1d(updl_executor_t *executor, const updl_layer_t *layer, 
                      updl_exec_layer_t *exec_layer);
 
 /**
@@ -62,7 +62,7 @@ uint8_t updl_conv_1d(updl_executor_t *executor, updl_layer_t *layer,
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_conv_2d(updl_executor_t *executor, updl_layer_t *layer, 
+uint8_t updl_conv_2d(updl_executor_t *executor, const updl_layer_t *layer, 
                      updl_exec_layer_t *exec_layer);
 
 /**
@@ -72,7 +72,7 @@ uint8_t updl_conv_2d(updl_executor_t *executor, updl_layer_t *layer,
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_depthwise_conv_2d(updl_executor_t *executor, updl_layer_t *layer,
+uint8_t updl_depthwise_conv_2d(updl_executor_t *executor, const updl_layer_t *layer,
                                updl_exec_layer_t *exec_layer);
 
 /**
@@ -82,7 +82,7 @@ uint8_t updl_depthwise_conv_2d(updl_executor_t *executor, updl_layer_t *layer,
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_dense(updl_executor_t *executor, updl_layer_t *layer, 
+uint8_t updl_dense(updl_executor_t *executor, const updl_layer_t *layer, 
                    updl_exec_layer_t *exec_layer);
 
 /**
@@ -91,7 +91,7 @@ uint8_t updl_dense(updl_executor_t *executor, updl_layer_t *layer,
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_max_pooling_2d(updl_layer_t *layer, updl_exec_layer_t *exec_layer);
+uint8_t updl_max_pooling_2d(const updl_layer_t *layer, updl_exec_layer_t *exec_layer);
 
 /**
  * @brief Execute AveragePooling2D layer
@@ -99,7 +99,7 @@ uint8_t updl_max_pooling_2d(updl_layer_t *layer, updl_exec_layer_t *exec_layer);
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_average_pooling_2d(updl_layer_t *layer, updl_exec_layer_t *exec_layer);
+uint8_t updl_average_pooling_2d(const updl_layer_t *layer, updl_exec_layer_t *exec_layer);
 
 /**
  * @brief Execute L2 normalization layer
@@ -107,7 +107,15 @@ uint8_t updl_average_pooling_2d(updl_layer_t *layer, updl_exec_layer_t *exec_lay
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_l2_norm(updl_layer_t *layer, updl_exec_layer_t *exec_layer);
+uint8_t updl_l2_norm(const updl_layer_t *layer, updl_exec_layer_t *exec_layer);
+
+/**
+ * @brief Execute Add layer
+ * @param[in] layer      Layer configuration
+ * @param[in] exec_layer Layer execution context
+ * @return Status code (0 = success)
+ */
+uint8_t updl_add(const updl_layer_t *layer, updl_exec_layer_t *exec_layer);
 
 /**
  * @brief Execute Softmax layer
@@ -116,7 +124,7 @@ uint8_t updl_l2_norm(updl_layer_t *layer, updl_exec_layer_t *exec_layer);
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_softmax(updl_executor_t *executor, updl_layer_t *layer, 
+uint8_t updl_softmax(updl_executor_t *executor, const updl_layer_t *layer,
                      updl_exec_layer_t *exec_layer);
 
 // ============================================================================
@@ -133,7 +141,7 @@ uint8_t updl_softmax(updl_executor_t *executor, updl_layer_t *layer,
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_run_layer(updl_executor_t *executor, updl_layer_t *layer,
+uint8_t updl_run_layer(updl_executor_t *executor, const updl_layer_t *layer,
                        updl_exec_layer_t *exec_layer);
 
 // ============================================================================

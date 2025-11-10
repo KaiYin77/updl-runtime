@@ -9,7 +9,6 @@
 // ============================================================================
 
 #include <updl/updl_utility.h>
-#include <up301/up301.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,7 +34,7 @@
 // FORWARD DECLARATIONS
 // ============================================================================
 
-typedef struct updl_executor_t updl_executor_t;
+// typedef struct updl_executor_t updl_executor_t; // Removed - defined in updl_operator.h
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -68,6 +67,7 @@ typedef enum ltype_t {
   Ltype_dense,
   Ltype_flatten,
   Ltype_lambda,
+  Ltype_add,
   Ltype_softmax,
 } ltype_t;
 
@@ -105,7 +105,7 @@ typedef struct weights_t {
 // Layer structure containing all layer parameters
 typedef struct updl_layer_t {
   // Basic layer information
-  int serial;
+  int32_t serial;
   char name[16];
   ltype_t type;
 

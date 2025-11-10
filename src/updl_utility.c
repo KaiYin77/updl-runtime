@@ -21,7 +21,7 @@
 
 void *updl_alloc(updl_context_t *ctx, size_t size) {
   if (!ctx || size == 0) {
-    updl_Error("Invalid allocation parameters\n");
+    updl_Error("%s", "Invalid allocation parameters\n");
     return NULL;
   }
 
@@ -45,7 +45,7 @@ void *updl_alloc(updl_context_t *ctx, size_t size) {
 
 updl_context_t *updl_init(uint8_t *memory, size_t memory_size) {
   if (!memory) {
-    updl_Error("Invalid memory parameters\n");
+    updl_Error("%s", "Invalid memory parameters\n");
     return NULL;
   }
 
@@ -66,7 +66,7 @@ updl_memory_pool_t *updl_create_memory_pool(uint8_t *memory, size_t total_size,
                                             size_t max_layer_size,
                                             const updl_model_t *model) {
   if (!memory || total_size < sizeof(updl_memory_pool_t)) {
-    updl_Error("Invalid memory pool parameters\n");
+    updl_Error("%s", "Invalid memory pool parameters\n");
     return NULL;
   }
 
@@ -109,7 +109,7 @@ updl_memory_pool_t *updl_create_memory_pool(uint8_t *memory, size_t total_size,
 
 void updl_reset_memory_pool(updl_memory_pool_t *pool) {
   if (!pool) {
-    updl_Error("Cannot reset NULL memory pool\n");
+    updl_Error("%s", "Cannot reset NULL memory pool\n");
     return;
   }
 
@@ -133,10 +133,10 @@ void updl_reset_memory_pool(updl_memory_pool_t *pool) {
 // STREAM BUFFER MANAGEMENT
 // ============================================================================
 
-int updl_ensure_buffer_capacity(updl_memory_pool_t *pool, size_t input_size,
+int32_t updl_ensure_buffer_capacity(updl_memory_pool_t *pool, size_t input_size,
                                 size_t output_size) {
   if (!pool) {
-    updl_Error("NULL memory pool\n");
+    updl_Error("%s","NULL memory pool\n");
     return -1;
   }
 
@@ -182,14 +182,14 @@ uint8_t *updl_get_output_buffer(updl_memory_pool_t *pool) {
 // EXECUTOR RECOVERY FUNCTIONS
 // ============================================================================
 
-int updl_reset_executor(updl_executor_t *executor) {
+int32_t updl_reset_executor(updl_executor_t *executor) {
   if (!executor) {
-    updl_Error("Cannot reset NULL executor\n");
+    updl_Error("%s", "Cannot reset NULL executor\n");
     return -1;
   }
 
   if (!executor->memory_pool) {
-    updl_Error("Cannot reset executor with NULL memory pool\n");
+    updl_Error("%s", "Cannot reset executor with NULL memory pool\n");
     return -1;
   }
 

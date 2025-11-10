@@ -95,7 +95,7 @@ uint8_t updl_conv2d_s16_udl(int16_t *input, int16_t *output, int16_t *weights, i
             size_t padded_size = padded_height * padded_width * input_channels * sizeof(int16_t);
             padded_input = (int16_t*)malloc(padded_size);
             if (!padded_input) {
-                updl_Error("Failed to allocate padded input buffer\n");
+                updl_Error("%s", "Failed to allocate padded input buffer\n");
                 return 1;
             }
             

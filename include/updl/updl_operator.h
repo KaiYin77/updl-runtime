@@ -8,7 +8,6 @@
 // INCLUDES
 // ============================================================================
 
-#include <up301/up301.h>
 #include <updl/updl_interpreter.h>
 #include <updl/updl_utility.h>
 
@@ -49,17 +48,16 @@ typedef struct updl_exec_layer_t {
   uint32_t bias_size;
 } updl_exec_layer_t;
 
-// Forward declaration
-typedef struct updl_model_t updl_model_t;
+// Forward declaration (removed - struct defined in updl_interpreter.h)
 
 // Execution context (streamlined)
-typedef struct updl_executor_t {
+struct updl_executor_t {
   const updl_model_t *model;       // Reference to model (not copy)
   updl_exec_layer_t *exec_layers;  // Array of layer execution contexts
   updl_memory_pool_t *memory_pool; // Memory management
   rstate_t state;                  // Current execution state
   uint16_t current_layer;          // Current layer being processed
-} updl_executor_t;
+};
 
 // ============================================================================
 // FUNCTION DECLARATIONS
@@ -71,6 +69,6 @@ updl_executor_t *updl_create_executor(const updl_model_t *model,
 void updl_free_executor(updl_executor_t *executor);
 
 // Inference functions
-int updl_execute(updl_executor_t *executor, const void *input, void *output);
+int32_t updl_execute(updl_executor_t *executor, const void *input, void *output);
 
 #endif // UPDL_OPERATOR_H

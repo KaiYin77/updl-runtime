@@ -72,7 +72,7 @@ uint8_t updl_depthwise_conv_s16_udl(int16_t *input, int16_t *output, int16_t *we
     
     // Validate depthwise convolution constraints
     if (depth_multiplier != 1) {
-        updl_Warning("Hardware accelerator only supports depth_multiplier=1, got %u\n", depth_multiplier);
+        updl_Warning("%s", "Hardware accelerator only supports depth_multiplier=1, got %u\n", depth_multiplier);
         return 1; // Fallback to software
     }
     
@@ -105,7 +105,7 @@ uint8_t updl_depthwise_conv_s16_udl(int16_t *input, int16_t *output, int16_t *we
             size_t padded_size = padded_height * padded_width * input_channels * sizeof(int16_t);
             padded_input = (int16_t*)malloc(padded_size);
             if (!padded_input) {
-                updl_Error("Failed to allocate padded input buffer\n");
+                updl_Error("%s", "Failed to allocate padded input buffer\n");
                 return 1;
             }
             
@@ -167,7 +167,7 @@ uint8_t updl_depthwise_conv_s16_udl(int16_t *input, int16_t *output, int16_t *we
     int16_t *temp_bias_buffer = (int16_t*)aligned_malloc(4, 4); // Single bias value, 4-byte aligned
     
     if (!temp_input_buffer || !temp_weight_buffer || !temp_bias_buffer) {
-        updl_Error("Failed to allocate aligned temporary buffers\n");
+        updl_Error("%s", "Failed to allocate aligned temporary buffers\n");
         if (padded_input != input) free(padded_input);
         if (temp_input_buffer) aligned_free(temp_input_buffer);
         if (temp_weight_buffer) aligned_free(temp_weight_buffer);

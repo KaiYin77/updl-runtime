@@ -411,6 +411,28 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
 
         break;
 
+    case Ltype_add:
+        updl_load_data(&((*layer)->input_shape), fp, Dtype_uint16_t, 4, "input_shape", TAG_FIELD,
+                      TAG_CHECK);
+        updl_load_data(&((*layer)->output_shape), fp, Dtype_uint16_t, 4, "output_shape", TAG_FIELD,
+                      TAG_CHECK);
+
+        updl_load_data(&((*layer)->activation), fp, Dtype_atype_t, 1, "activation", TAG_FIELD,
+                      TAG_CHECK);
+
+        // Load layer quantization parameters (no weights for Add layer)
+        updl_load_data(&((*layer)->act_scale), fp, Dtype_float32_t, 1, "act_scale", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->act_zp), fp, Dtype_int16_t, 1, "act_zp", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->weight_scale), fp, Dtype_float32_t, 1, "weight_scale", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->weight_zp), fp, Dtype_int16_t, 1, "weight_zp", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->bias_scale), fp, Dtype_float32_t, 1, "bias_scale", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
+
+        // Add layers can have bias data for the second input tensor
+        updl_load_weights(&((*layer)->bias), fp);
+
+        break;
+
     case Ltype_softmax:
         updl_load_data(&((*layer)->input_shape), fp, Dtype_uint16_t, 4, "input_shape", TAG_FIELD,
                       TAG_CHECK);

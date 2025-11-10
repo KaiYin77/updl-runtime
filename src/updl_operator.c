@@ -17,7 +17,7 @@
 
 updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
   if (!ctx || !model_data) {
-    updl_Error("Invalid parameters for model loading\n");
+    updl_Error("%s", "Invalid parameters for model loading\n");
     return NULL;
   }
 
@@ -53,7 +53,7 @@ updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
   model->layers =
       (updl_layer_t *)updl_alloc(ctx, sizeof(updl_layer_t) * model->num_layers);
   if (!model->layers) {
-    updl_Error("Failed to allocate layer storage!\n");
+    updl_Error("%s", "Failed to allocate layer storage!\n");
     return NULL;
   }
 
@@ -146,7 +146,7 @@ updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
 updl_executor_t *updl_create_executor(const updl_model_t *model,
                                       updl_memory_pool_t *memory_pool) {
   if (!model || !memory_pool) {
-    updl_Error("Invalid parameters for executor creation\n");
+    updl_Error("%s", "Invalid parameters for executor creation\n");
     return NULL;
   }
 
@@ -159,7 +159,7 @@ updl_executor_t *updl_create_executor(const updl_model_t *model,
   static updl_executor_t static_executor;
   updl_executor_t *executor = &static_executor;
   // Clear the static executor structure
-  for (int i = 0; i < sizeof(updl_executor_t); i++) {
+  for (int32_t i = 0; i < (int) sizeof(updl_executor_t); i++) {
     ((uint8_t *)executor)[i] = 0;
   }
 
@@ -184,7 +184,7 @@ updl_executor_t *updl_create_executor(const updl_model_t *model,
 
   executor->exec_layers = static_exec_layers;
   // Clear the static exec layers structure
-  for (int i = 0; i < sizeof(static_exec_layers); i++) {
+  for (int32_t i = 0; i < (int32_t) sizeof(static_exec_layers); i++) {
     ((uint8_t *)static_exec_layers)[i] = 0;
   }
 
@@ -196,7 +196,7 @@ updl_executor_t *updl_create_executor(const updl_model_t *model,
     exec_layer->input_size = 1;
     exec_layer->output_size = 1;
 
-    for (int j = 0; j < 4; j++) {
+    for (int32_t j = 0; j < 4; j++) {
       if (layer->input_shape[j] > 0) {
         exec_layer->input_size *= layer->input_shape[j];
       }
@@ -216,14 +216,14 @@ updl_executor_t *updl_create_executor(const updl_model_t *model,
 
     // Calculate weight and bias sizes
     exec_layer->weight_size = 1;
-    for (int j = 0; j < layer->weights.weight_shape_d; j++) {
+    for (int32_t j = 0; j < layer->weights.weight_shape_d; j++) {
       if (layer->weights.weight_shape[j] > 0) {
         exec_layer->weight_size *= layer->weights.weight_shape[j];
       }
     }
 
     exec_layer->bias_size = 1;
-    for (int j = 0; j < layer->bias.weight_shape_d; j++) {
+    for (int32_t j = 0; j < layer->bias.weight_shape_d; j++) {
       if (layer->bias.weight_shape[j] > 0) {
         exec_layer->bias_size *= layer->bias.weight_shape[j];
       }
@@ -245,7 +245,7 @@ void updl_free_executor(updl_executor_t *executor) {
   }
 }
 
-int updl_execute(updl_executor_t *executor, const void *input, void *output) {
+int32_t updl_execute(updl_executor_t *executor, const void *input, void *output) {
   if (!executor || !input || !output) {
     updl_Error(
         "Execute failed: NULL pointer (executor=%p, input=%p, output=%p)\n",
@@ -254,12 +254,12 @@ int updl_execute(updl_executor_t *executor, const void *input, void *output) {
   }
 
   if (!executor->memory_pool) {
-    updl_Error("Execute failed: NULL memory pool in executor\n");
+    updl_Error("%s", "Execute failed: NULL memory pool in executor\n");
     return -1;
   }
 
   if (!executor->model) {
-    updl_Error("Execute failed: NULL model in executor\n");
+    updl_Error("%s", "Execute failed: NULL model in executor\n");
     return -1;
   }
 
@@ -275,7 +275,7 @@ int updl_execute(updl_executor_t *executor, const void *input, void *output) {
         executor->state == rstate_running_soft) {
       updl_Warning("Executor state was %s, attempting recovery\n", state_name);
       if (updl_reset_executor(executor) != 0) {
-        updl_Error("Failed to reset executor, cannot proceed\n");
+        updl_Error("%s", "Failed to reset executor, cannot proceed\n");
         return -1;
       }
     } else {
@@ -354,7 +354,7 @@ int updl_execute(updl_executor_t *executor, const void *input, void *output) {
     uint32_t updl_start = updl_get_current_ticks();
 #endif 
 
-    int result = 0;
+    int32_t result = 0;
     switch (layer->type) {
     case Ltype_conv_1d:
       result = updl_conv_1d(executor, layer, exec_layer);
@@ -384,6 +384,9 @@ int updl_execute(updl_executor_t *executor, const void *input, void *output) {
       break;
     case Ltype_lambda:
       result = updl_l2_norm(layer, exec_layer);
+      break;
+    case Ltype_add:
+      result = updl_add(layer, exec_layer);
       break;
     case Ltype_softmax:
       result = updl_softmax(executor, layer, exec_layer);
@@ -432,7 +435,7 @@ int updl_execute(updl_executor_t *executor, const void *input, void *output) {
     }
 
     // Swap buffers for next layer (output becomes input)
-    if (i < model->num_layers - 1) {
+    if (i < (size_t) model->num_layers - 1) {
       updl_Debug("Swapping buffers for next layer (current layer: %d)\n", i);
       updl_swap_stream_buffers(pool);
     } 

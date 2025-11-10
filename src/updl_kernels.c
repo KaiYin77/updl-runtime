@@ -40,7 +40,7 @@
 /**
  * @brief Conv1D layer implementation using Conv2D modular functions
  */
-uint8_t updl_conv_1d(updl_executor_t *executor, updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+uint8_t updl_conv_1d(updl_executor_t *executor, const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
     if (layer->type != Ltype_conv_1d)
         return 1;
 
@@ -65,7 +65,7 @@ uint8_t updl_conv_1d(updl_executor_t *executor, updl_layer_t *layer, updl_exec_l
 /**
  * @brief Conv2D layer implementation with hardware dispatch
  */
-uint8_t updl_conv_2d(updl_executor_t *executor, updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+uint8_t updl_conv_2d(updl_executor_t *executor, const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
     if (layer->type != Ltype_conv_2d)
         return 1;
 
@@ -91,7 +91,7 @@ uint8_t updl_conv_2d(updl_executor_t *executor, updl_layer_t *layer, updl_exec_l
         return 0;
     }
     // If hardware failed, continue to software fallback
-    updl_Warning("Hardware accelerator unavailable, falling back to software\n");
+    updl_Warning("%s", "Hardware accelerator unavailable, falling back to software\n");
 #ifndef USE_UPDL_UDL_KERNEL
 
     // Check for optimized kernel 1: 64x1x1x64 -> 64x25x5 (1x1 convolution)
@@ -150,7 +150,7 @@ uint8_t updl_conv_2d(updl_executor_t *executor, updl_layer_t *layer, updl_exec_l
 /**
  * @brief DepthwiseConv2D layer implementation with hardware dispatch and optimized kernel selection
  */
-uint8_t updl_depthwise_conv_2d(updl_executor_t *executor, updl_layer_t *layer,
+uint8_t updl_depthwise_conv_2d(updl_executor_t *executor, const updl_layer_t *layer,
                                updl_exec_layer_t *exec_layer) {
     if (layer->type != Ltype_depthwise_conv_2d)
         return 1;
@@ -177,7 +177,7 @@ uint8_t updl_depthwise_conv_2d(updl_executor_t *executor, updl_layer_t *layer,
         return 0;
     }
     // If hardware failed, continue to software fallback
-    updl_Warning("Hardware accelerator unavailable, falling back to software\n");
+    updl_Warning("%s", "Hardware accelerator unavailable, falling back to software\n");
 
 #ifndef USE_UPDL_UDL_KERNEL
     // Check for optimized kernel: 64x25x5 input, 64x3x3 weights, depth_multiplier=1, stride=1
@@ -216,7 +216,7 @@ uint8_t updl_depthwise_conv_2d(updl_executor_t *executor, updl_layer_t *layer,
 /**
  * @brief Dense layer implementation with hardware dispatch
  */
-uint8_t updl_dense(updl_executor_t *executor, updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+uint8_t updl_dense(updl_executor_t *executor, const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
     if (layer->type != Ltype_dense)
         return 1;
 
@@ -239,7 +239,7 @@ uint8_t updl_dense(updl_executor_t *executor, updl_layer_t *layer, updl_exec_lay
         return 0;
     }
     // If hardware failed, continue to software fallback
-    updl_Warning("Hardware accelerator unavailable, falling back to software\n");
+    updl_Warning("%s", "Hardware accelerator unavailable, falling back to software\n");
 
     // Fallback to software implementation
     return updl_fully_connected_s16(
@@ -257,7 +257,7 @@ uint8_t updl_dense(updl_executor_t *executor, updl_layer_t *layer, updl_exec_lay
 /**
  * @brief MaxPooling2D layer implementation using modular functions
  */
-uint8_t updl_max_pooling_2d(updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+uint8_t updl_max_pooling_2d(const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
     if (layer->type != Ltype_max_pooling_2d)
         return 1;
 
@@ -272,7 +272,7 @@ uint8_t updl_max_pooling_2d(updl_layer_t *layer, updl_exec_layer_t *exec_layer) 
 /**
  * @brief AveragePooling2D layer implementation using modular functions
  */
-uint8_t updl_average_pooling_2d(updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+uint8_t updl_average_pooling_2d(const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
     if (layer->type != Ltype_average_pooling_2d)
         return 1;
 
@@ -290,7 +290,7 @@ uint8_t updl_average_pooling_2d(updl_layer_t *layer, updl_exec_layer_t *exec_lay
 /**
  * @brief L2 normalization layer implementation
  */
-uint8_t updl_l2_norm(updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+uint8_t updl_l2_norm(const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
     if (layer->type != Ltype_lambda)
         return 1;
 
@@ -301,9 +301,46 @@ uint8_t updl_l2_norm(updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
 }
 
 /**
+ * @brief Add layer implementation
+ * Element-wise addition with broadcast support for bias-like operations
+ */
+uint8_t updl_add(const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+    if (layer->type != Ltype_add)
+        return 1;
+
+    int16_t *input = (int16_t *)exec_layer->input_ptr;
+    int16_t *output = (int16_t *)exec_layer->output_ptr;
+    int16_t *bias = layer->bias.weight;
+
+    uint32_t total_size = exec_layer->input_size;
+
+    // Simple element-wise addition with bias
+    // For Add operations, the "bias" contains the second input tensor
+    if (bias != NULL) {
+        // Element-wise addition with broadcast
+        for (uint32_t i = 0; i < total_size; i++) {
+            // Bias broadcast: if bias has fewer elements, repeat pattern
+            uint32_t bias_idx = (exec_layer->bias_size > 0) ? (i % exec_layer->bias_size) : 0;
+            int32_t result = (int32_t)input[i] + (int32_t)bias[bias_idx];
+
+            // Simple clamping to int16 range
+            if (result > 32767) result = 32767;
+            if (result < -32768) result = -32768;
+
+            output[i] = (int16_t)result;
+        }
+    } else {
+        // No second input - just copy input to output
+        memcpy(output, input, total_size * sizeof(int16_t));
+    }
+
+    return 0;
+}
+
+/**
  * @brief Softmax layer implementation using modular functions
  */
-uint8_t updl_softmax(updl_executor_t *executor, updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+uint8_t updl_softmax(updl_executor_t *executor, const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
     if (layer->type != Ltype_softmax)
         return 1;
 
