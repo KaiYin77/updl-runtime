@@ -23,6 +23,8 @@ typedef struct {
   updl_layer_result_t *layer_results; // Array to store results
   bool verbose;                       // Verbose output flag
   const updl_model_t *model;          // Model reference for quantization params
+  float *dequant_buffer;              // Reusable buffer (NULL = use malloc)
+  size_t dequant_buffer_size;         // Buffer size in elements
 } layer_capture_context_t;
 
 /**
@@ -47,13 +49,14 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
       result->layer_index = golden->layer_index;
       result->passed = false;
 
-      // Allocate buffer for dequantized output
-      float *fp32_output = (float *)malloc(output_size * sizeof(float));
-      if (!fp32_output) {
-        updl_Error("ERROR: Memory allocation failed for layer %s\n",
-                   golden->layer_name);
+      // Use provided reusable buffer (no dynamic allocation)
+      if (!ctx->dequant_buffer || output_size > ctx->dequant_buffer_size) {
+        updl_Error(
+            "ERROR: Dequant buffer too small for layer %s (need %zu, have %zu)\n",
+            golden->layer_name, output_size, ctx->dequant_buffer_size);
         return;
       }
+      float *fp32_output = ctx->dequant_buffer;
 
       // Get quantization parameters for this layer
       const updl_layer_t *layer = &ctx->model->layers[layer_idx];
@@ -87,7 +90,7 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
         }
       }
 
-      free(fp32_output);
+      // Buffer is reused, no free needed
       break; // Found and processed this layer
     }
   }
@@ -147,11 +150,13 @@ static updl_sample_result_t test_single_sample(const updl_test_config_t *config,
   }
 
   // Set up callback context for layer capture
-  layer_capture_context_t capture_ctx = {.sample = sample,
-                                         .layer_results =
-                                             sample_result.layer_results,
-                                         .verbose = config->verbose,
-                                         .model = config->model};
+  layer_capture_context_t capture_ctx = {
+      .sample = sample,
+      .layer_results = sample_result.layer_results,
+      .verbose = config->verbose,
+      .model = config->model,
+      .dequant_buffer = config->dequant_buffer,
+      .dequant_buffer_size = config->dequant_buffer_size};
 
   // Register callback to capture layer outputs during inference
   updl_set_layer_callback(config->executor, layer_capture_callback,

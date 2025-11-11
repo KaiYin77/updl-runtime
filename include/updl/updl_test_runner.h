@@ -56,6 +56,11 @@ typedef struct {
   updl_executor_t *executor; // UPDL executor to use
 
   bool verbose; // Print detailed metrics
+
+  // REQUIRED: Reusable buffer for dequantization (eliminates malloc per layer)
+  // Must be sized for the largest layer output in the model
+  float *dequant_buffer;      // Reusable buffer (MUST NOT be NULL)
+  size_t dequant_buffer_size; // Buffer size in elements
 } updl_test_config_t;
 
 // ============================================================================
