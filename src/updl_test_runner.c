@@ -57,7 +57,7 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
 
       // Get quantization parameters for this layer
       const updl_layer_t *layer = &ctx->model->layers[layer_idx];
-      float output_scale = layer->output_scale;
+      float output_scale = layer->act_scale;
       int16_t output_zp = layer->act_zp;
 
       // Dequantize int16 to fp32
