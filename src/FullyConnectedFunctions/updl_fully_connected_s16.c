@@ -3,6 +3,7 @@
 
 #include "updl/updl_kernels.h"
 #include "updl/updl_kernels_support.h"
+#include "updl/updl_nn_utils_udl.h"
 #include "updl/updl_operator.h"
 
 #include <assert.h>
@@ -32,30 +33,14 @@ uint8_t updl_fully_connected_s16(
             int32_t inp = (int32_t)input[in_feat] - (int32_t)input_zp;
             int32_t wgt = (int32_t)weight_row[in_feat] - (int32_t)weight_zp;
             sum += (int64_t)inp * (int64_t)wgt;
+            sum = updl_udl_bound40(sum);
         }
 
-        // Add bias with proper scaling
-        if (bias) {
-            int64_t scaled_bias = updl_scale_bias(bias[out_feat], eff_bias_multiplier, eff_bias_shift);
-            sum += scaled_bias;
-        }
-        
-        // Check if we need dynamic scaling
-        if (sum > INT32_MAX || sum < INT32_MIN) {
-            // Use original path with dynamic scaling for overflow cases
-            int16_t dynamic_shift = 0;
-            int32_t raw_sum = updl_clamp_s32_with_scaling(sum, &dynamic_shift);
-            int32_t activated = updl_activation(raw_sum, activation);
-            int16_t adjusted_shift = eff_shift - dynamic_shift;
-            int32_t quantized = updl_requantize(activated, eff_multiplier, adjusted_shift);
-            quantized += output_zp;
-            output[out_feat] = updl_clamp_s16(quantized);
-        } else {
-            // Use optimized pipeline for normal cases (most common)
-            output[out_feat] = updl_quantize_pipeline(sum, activation, eff_multiplier, eff_shift, output_zp);
-        }
+        int16_t bias_val = bias ? bias[out_feat] : 0;
+        output[out_feat] = updl_udl_finalize(
+            sum, bias_val, activation, eff_multiplier, eff_shift, output_zp,
+            eff_bias_multiplier, eff_bias_shift);
     }
     return 0;
 }
-
 

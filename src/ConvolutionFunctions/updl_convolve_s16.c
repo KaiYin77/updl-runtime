@@ -3,6 +3,7 @@
 
 #include "updl/updl_kernels.h"
 #include "updl/updl_kernels_support.h"
+#include "updl/updl_nn_utils_udl.h"
 #include "updl/updl_operator.h"
 #include "updl/updl_utility.h"
 
@@ -10,8 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// Wrapper function removed - updl_kernels.c calls core implementations directly
 
 /**
  * @brief Naive s16 convolution implementation without any optimizations
@@ -33,7 +32,7 @@ uint8_t updl_convolve_s16(int16_t *input, int16_t *output, int16_t *weights, int
 {
     const uint32_t input_hw_size = input_height * input_width;
     const uint32_t output_hw_size = output_height * output_width;
-    
+
     // Calculate padding values based on padding type
     uint32_t pad_top = 0, pad_bottom = 0, pad_left = 0, pad_right = 0;
     if (padding == Ptype_same) {
@@ -76,17 +75,15 @@ uint8_t updl_convolve_s16(int16_t *input, int16_t *output, int16_t *weights, int
                             int32_t inp = (int32_t)input_val - (int32_t)input_zp;
                             int32_t wgt = (int32_t)weight_val - (int32_t)weight_zp;
                             sum += (int64_t)inp * (int64_t)wgt;
+                            sum = updl_udl_bound40(sum);
                         }
                     }
                 }
                 
-                // Scale bias from bias_scale to accumulator scale using updl_scale_bias
-                int64_t scaled_bias = updl_scale_bias(bias[out_ch], eff_bias_multiplier, eff_bias_shift);
-                sum += scaled_bias;
-
-                // CHW output indexing: output[out_ch][out_y][out_x] - use optimized pipeline
-                output[out_ch * output_hw_size + out_y * output_width + out_x] = updl_quantize_pipeline(
-                    sum, activation, eff_multiplier, eff_shift, output_zp);
+                int16_t bias_val = bias ? bias[out_ch] : 0;
+                output[out_ch * output_hw_size + out_y * output_width + out_x] = updl_udl_finalize(
+                    sum, bias_val, activation, eff_multiplier, eff_shift, output_zp,
+                    eff_bias_multiplier, eff_bias_shift);
             }
         }
     }
@@ -116,7 +113,7 @@ uint8_t updl_convolve_64x1x1x64_s16_64x25x5(int16_t *input, int16_t *output, int
     const uint32_t num_pixels = input_height * input_width;  // 25 * 5 = 125
     const uint32_t input_hw_size = num_pixels;
     const uint32_t output_hw_size = num_pixels;
-    
+
     // Calculate padding (though 1x1 convolution doesn't typically need padding)
     uint32_t pad_top = 0, pad_bottom = 0, pad_left = 0, pad_right = 0;
     if (padding == Ptype_same) {
@@ -133,6 +130,8 @@ uint8_t updl_convolve_64x1x1x64_s16_64x25x5(int16_t *input, int16_t *output, int
         // CHW output layout: output[ch][y][x] = output[ch * 125 + y*5 + x]
         int16_t *output_ptr0 = output + out_ch_pair * num_pixels;
         int16_t *output_ptr1 = output + (out_ch_pair + 1) * num_pixels;
+        int16_t bias0 = bias ? bias[out_ch_pair] : 0;
+        int16_t bias1 = bias ? bias[out_ch_pair + 1] : 0;
 
         // Process pixels in pairs for better throughput
         uint32_t pixel_pairs = num_pixels >> 1;
@@ -158,21 +157,24 @@ uint8_t updl_convolve_64x1x1x64_s16_64x25x5(int16_t *input, int16_t *output, int
                 sum01 += (int64_t)inp0_val * (int64_t)wgt1_val;
                 sum10 += (int64_t)inp1_val * (int64_t)wgt0_val;
                 sum11 += (int64_t)inp1_val * (int64_t)wgt1_val;
+                sum00 = updl_udl_bound40(sum00);
+                sum01 = updl_udl_bound40(sum01);
+                sum10 = updl_udl_bound40(sum10);
+                sum11 = updl_udl_bound40(sum11);
             }
 
-            // Add bias if present with proper scaling
-            if (bias) {
-                int64_t b0 = updl_scale_bias(bias[out_ch_pair], eff_bias_multiplier, eff_bias_shift);
-                int64_t b1 = updl_scale_bias(bias[out_ch_pair + 1], eff_bias_multiplier, eff_bias_shift);
-                sum00 += b0; sum01 += b1;
-                sum10 += b0; sum11 += b1;
-            }
-
-            // Use optimized pipeline instead of 5 separate function calls
-            output_ptr0[pixel_idx0] = updl_quantize_pipeline(sum00, activation, eff_multiplier, eff_shift, output_zp);
-            output_ptr1[pixel_idx0] = updl_quantize_pipeline(sum01, activation, eff_multiplier, eff_shift, output_zp);
-            output_ptr0[pixel_idx1] = updl_quantize_pipeline(sum10, activation, eff_multiplier, eff_shift, output_zp);
-            output_ptr1[pixel_idx1] = updl_quantize_pipeline(sum11, activation, eff_multiplier, eff_shift, output_zp);
+            output_ptr0[pixel_idx0] = updl_udl_finalize(sum00, bias0, activation,
+                                                        eff_multiplier, eff_shift, output_zp,
+                                                        eff_bias_multiplier, eff_bias_shift);
+            output_ptr1[pixel_idx0] = updl_udl_finalize(sum01, bias1, activation,
+                                                        eff_multiplier, eff_shift, output_zp,
+                                                        eff_bias_multiplier, eff_bias_shift);
+            output_ptr0[pixel_idx1] = updl_udl_finalize(sum10, bias0, activation,
+                                                        eff_multiplier, eff_shift, output_zp,
+                                                        eff_bias_multiplier, eff_bias_shift);
+            output_ptr1[pixel_idx1] = updl_udl_finalize(sum11, bias1, activation,
+                                                        eff_multiplier, eff_shift, output_zp,
+                                                        eff_bias_multiplier, eff_bias_shift);
         }
 
         // Handle leftover pixel (if num_pixels is odd) - CHW layout
@@ -191,16 +193,16 @@ uint8_t updl_convolve_64x1x1x64_s16_64x25x5(int16_t *input, int16_t *output, int
                 int32_t w1 = (int32_t)(*wgt1_ptr++) - (int32_t)weight_zp;
                 sum0 += (int64_t)inp * (int64_t)w0;
                 sum1 += (int64_t)inp * (int64_t)w1;
+                sum0 = updl_udl_bound40(sum0);
+                sum1 = updl_udl_bound40(sum1);
             }
 
-            int64_t b0 = updl_scale_bias(bias[out_ch_pair], eff_bias_multiplier, eff_bias_shift);
-            int64_t b1 = updl_scale_bias(bias[out_ch_pair + 1], eff_bias_multiplier, eff_bias_shift);
-            sum0 += b0;
-            sum1 += b1;
-
-            // Use optimized pipeline instead of 5 separate function calls
-            output_ptr0[last_pixel_idx] = updl_quantize_pipeline(sum0, activation, eff_multiplier, eff_shift, output_zp);
-            output_ptr1[last_pixel_idx] = updl_quantize_pipeline(sum1, activation, eff_multiplier, eff_shift, output_zp);
+            output_ptr0[last_pixel_idx] = updl_udl_finalize(sum0, bias0, activation,
+                                                            eff_multiplier, eff_shift, output_zp,
+                                                            eff_bias_multiplier, eff_bias_shift);
+            output_ptr1[last_pixel_idx] = updl_udl_finalize(sum1, bias1, activation,
+                                                            eff_multiplier, eff_shift, output_zp,
+                                                            eff_bias_multiplier, eff_bias_shift);
         }
     }
 
@@ -232,7 +234,7 @@ uint8_t updl_convolve_64x1x10x4_s16_1x49x10(int16_t *input, int16_t *output, int
     
     const uint32_t input_hw_size = input_height * input_width;
     const uint32_t output_hw_size = output_height * output_width;
-    
+
     // Calculate padding values based on padding type
     uint32_t pad_top = 0, pad_bottom = 0, pad_left = 0, pad_right = 0;
     if (padding == Ptype_same) {
@@ -271,17 +273,15 @@ uint8_t updl_convolve_64x1x10x4_s16_1x49x10(int16_t *input, int16_t *output, int
                             int32_t inp = (int32_t)input_val - (int32_t)input_zp;
                             int32_t wgt = (int32_t)weight_val - (int32_t)weight_zp;
                             sum += (int64_t)inp * (int64_t)wgt;
+                            sum = updl_udl_bound40(sum);
                         }
                     }
                 }
                 
-                // Scale bias from bias_scale to accumulator scale using updl_scale_bias
-                int64_t scaled_bias = updl_scale_bias(bias[out_ch], eff_bias_multiplier, eff_bias_shift);
-                sum += scaled_bias;
-
-                // CHW output indexing: output[out_ch][out_y][out_x] - use optimized pipeline
-                output[out_ch * output_hw_size + out_y * output_width + out_x] = updl_quantize_pipeline(
-                    sum, activation, eff_multiplier, eff_shift, output_zp);
+                int16_t bias_val = bias ? bias[out_ch] : 0;
+                output[out_ch * output_hw_size + out_y * output_width + out_x] = updl_udl_finalize(
+                    sum, bias_val, activation, eff_multiplier, eff_shift, output_zp,
+                    eff_bias_multiplier, eff_bias_shift);
             }
         }
     }
