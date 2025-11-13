@@ -72,26 +72,31 @@ uint8_t updl_conv_2d(updl_executor_t *executor, const updl_layer_t *layer, updl_
     int16_t *weights = layer->weights.weight;
     int16_t *bias = layer->bias.weight;
 
-    // Try hardware accelerator first
-    uint8_t hw_result = updl_conv2d_s16_udl(
+    // Try hardware accelerator only when executor state is running_hard
+    uint8_t hw_result = 1; // Default to "hardware failed"
+    if (executor->state == rstate_running_hard) {
+        hw_result = updl_conv2d_s16_udl(
         (int16_t *)exec_layer->input_ptr,
         (int16_t *)exec_layer->output_ptr,
         weights, bias,
         layer->input_shape[1], layer->input_shape[2], layer->input_shape[3],
-        layer->output_shape[1], layer->output_shape[2], layer->output_shape[3],
-        layer->kernel_size[0], layer->kernel_size[1],
-        layer->strides[0], layer->strides[1], layer->padding,
-        layer->activation,
-        layer->effective_multiplier, layer->effective_shift,
-        layer->input_zp, layer->weight_zp, layer->output_zp,
-        layer->effective_bias_multiplier, layer->effective_bias_shift);
-        
+            layer->output_shape[1], layer->output_shape[2], layer->output_shape[3],
+            layer->kernel_size[0], layer->kernel_size[1],
+            layer->strides[0], layer->strides[1], layer->padding,
+            layer->activation,
+            layer->effective_multiplier, layer->effective_shift,
+            layer->input_zp, layer->weight_zp, layer->output_zp,
+            layer->effective_bias_multiplier, layer->effective_bias_shift);
+    }
+
     // If hardware succeeded, return success
     if (hw_result == 0) {
         return 0;
     }
     // If hardware failed, continue to software fallback
-    updl_Warning("%s", "Hardware accelerator unavailable, falling back to software\n");
+    if (hw_result != 0 && executor->state == rstate_running_hard) {
+        updl_Warning("%s", "Hardware accelerator unavailable, falling back to software\n");
+    }
 #ifndef USE_UPDL_UDL_KERNEL
 
     // Check for optimized kernel 1: 64x1x1x64 -> 64x25x5 (1x1 convolution)
@@ -158,26 +163,31 @@ uint8_t updl_depthwise_conv_2d(updl_executor_t *executor, const updl_layer_t *la
     int16_t *weights = layer->weights.weight;
     int16_t *bias = layer->bias.weight;
 
-    // Try hardware accelerator first
-    uint8_t hw_result = updl_depthwise_conv_s16_udl(
+    // Try hardware accelerator only when executor state is running_hard
+    uint8_t hw_result = 1; // Default to "hardware failed"
+    if (executor->state == rstate_running_hard) {
+        hw_result = updl_depthwise_conv_s16_udl(
         (int16_t *)exec_layer->input_ptr,
         (int16_t *)exec_layer->output_ptr,
         weights, bias,
         layer->input_shape[1], layer->input_shape[2], layer->input_shape[3],
         layer->output_shape[1], layer->output_shape[2], layer->output_shape[3],
-        layer->kernel_size[0], layer->kernel_size[1], layer->depth_multiplier,
-        layer->strides[0], layer->strides[1], layer->padding,
-        layer->activation,
-        layer->effective_multiplier, layer->effective_shift,
-        layer->input_zp, layer->weight_zp, layer->output_zp,
-        layer->effective_bias_multiplier, layer->effective_bias_shift);
-        
+            layer->kernel_size[0], layer->kernel_size[1], layer->depth_multiplier,
+            layer->strides[0], layer->strides[1], layer->padding,
+            layer->activation,
+            layer->effective_multiplier, layer->effective_shift,
+            layer->input_zp, layer->weight_zp, layer->output_zp,
+            layer->effective_bias_multiplier, layer->effective_bias_shift);
+    }
+
     // If hardware succeeded, return success
     if (hw_result == 0) {
         return 0;
     }
     // If hardware failed, continue to software fallback
-    updl_Warning("%s", "Hardware accelerator unavailable, falling back to software\n");
+    if (hw_result != 0 && executor->state == rstate_running_hard) {
+        updl_Warning("%s", "Hardware accelerator unavailable, falling back to software\n");
+    }
 
 #ifndef USE_UPDL_UDL_KERNEL
     // Check for optimized kernel: 64x25x5 input, 64x3x3 weights, depth_multiplier=1, stride=1
@@ -223,23 +233,28 @@ uint8_t updl_dense(updl_executor_t *executor, const updl_layer_t *layer, updl_ex
     int16_t *weights = layer->weights.weight;
     int16_t *bias = layer->bias.weight;
 
-    // Attempt hardware dispatch
-    uint8_t hw_result = updl_fully_connected_s16_udl(
+    // Try hardware accelerator only when executor state is running_hard
+    uint8_t hw_result = 1; // Default to "hardware failed"
+    if (executor->state == rstate_running_hard) {
+        hw_result = updl_fully_connected_s16_udl(
         (int16_t *)exec_layer->input_ptr,
         (int16_t *)exec_layer->output_ptr,
         weights, bias,
-        layer->input_shape[1], layer->units,
-        layer->activation,
-        layer->effective_multiplier, layer->effective_shift,
-        layer->input_zp, layer->weight_zp, layer->output_zp,
-        layer->effective_bias_multiplier, layer->effective_bias_shift);
-        
+            layer->input_shape[1], layer->units,
+            layer->activation,
+            layer->effective_multiplier, layer->effective_shift,
+            layer->input_zp, layer->weight_zp, layer->output_zp,
+            layer->effective_bias_multiplier, layer->effective_bias_shift);
+    }
+
     // If hardware succeeded, return success
     if (hw_result == 0) {
         return 0;
     }
     // If hardware failed, continue to software fallback
-    updl_Warning("%s", "Hardware accelerator unavailable, falling back to software\n");
+    if (hw_result != 0 && executor->state == rstate_running_hard) {
+        updl_Warning("%s", "Hardware accelerator unavailable, falling back to software\n");
+    }
 
     // Fallback to software implementation
     return updl_fully_connected_s16(

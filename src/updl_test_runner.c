@@ -51,9 +51,9 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
 
       // Use provided reusable buffer (no dynamic allocation)
       if (!ctx->dequant_buffer || output_size > ctx->dequant_buffer_size) {
-        updl_Error(
-            "ERROR: Dequant buffer too small for layer %s (need %zu, have %zu)\n",
-            golden->layer_name, output_size, ctx->dequant_buffer_size);
+        updl_Error("ERROR: Dequant buffer too small for layer %s (need %zu, "
+                   "have %zu)\n",
+                   golden->layer_name, output_size, ctx->dequant_buffer_size);
         return;
       }
       float *fp32_output = ctx->dequant_buffer;
@@ -111,7 +111,7 @@ static updl_sample_result_t test_single_sample(const updl_test_config_t *config,
   sample_result.layer_results = (updl_layer_result_t *)calloc(
       sample->num_layers, sizeof(updl_layer_result_t));
   if (!sample_result.layer_results) {
-    updl_Error("ERROR: Memory allocation failed for layer results\n");
+    updl_Error("%s", "ERROR: Memory allocation failed for layer results\n");
     return sample_result;
   }
 
@@ -123,7 +123,8 @@ static updl_sample_result_t test_single_sample(const updl_test_config_t *config,
   int16_t *input_int16 =
       (int16_t *)malloc(sample->input_size * sizeof(int16_t));
   if (!input_int16) {
-    updl_Error("ERROR: Memory allocation failed for input quantization\n");
+    updl_Error("%s",
+               "ERROR: Memory allocation failed for input quantization\n");
     free(sample_result.layer_results);
     sample_result.layer_results = NULL;
     return sample_result;
@@ -142,7 +143,7 @@ static updl_sample_result_t test_single_sample(const updl_test_config_t *config,
                            .output_shape[1]; // Assuming [batch, classes]
   int16_t *output_int16 = (int16_t *)malloc(output_size * sizeof(int16_t));
   if (!output_int16) {
-    updl_Error("ERROR: Memory allocation failed for output buffer\n");
+    updl_Error("%s", "ERROR: Memory allocation failed for output buffer\n");
     free(input_int16);
     free(sample_result.layer_results);
     sample_result.layer_results = NULL;
@@ -201,7 +202,7 @@ updl_test_report_t *
 updl_run_validation_tests(const updl_test_config_t *config) {
 
   if (!config || !config->samples || !config->model || !config->executor) {
-    updl_Error("ERROR: Invalid test configuration\n");
+    updl_Error("%s", "ERROR: Invalid test configuration\n");
     return NULL;
   }
 
@@ -209,7 +210,7 @@ updl_run_validation_tests(const updl_test_config_t *config) {
   updl_test_report_t *report =
       (updl_test_report_t *)calloc(1, sizeof(updl_test_report_t));
   if (!report) {
-    updl_Error("ERROR: Memory allocation failed for test report\n");
+    updl_Error("%s", "ERROR: Memory allocation failed for test report\n");
     return NULL;
   }
 
@@ -218,15 +219,15 @@ updl_run_validation_tests(const updl_test_config_t *config) {
       config->num_samples, sizeof(updl_sample_result_t));
 
   if (!report->sample_results) {
-    updl_Error("ERROR: Memory allocation failed for sample results\n");
+    updl_Error("%s", "ERROR: Memory allocation failed for sample results\n");
     free(report);
     return NULL;
   }
 
-  updl_Info("\n");
-  updl_Info("========================================\n");
-  updl_Info("  UPDL Runtime Validation Tests\n");
-  updl_Info("========================================\n");
+  updl_Info("%s", "\n");
+  updl_Info("%s", "========================================\n");
+  updl_Info("%s", "  UPDL Runtime Validation Tests\n");
+  updl_Info("%s", "========================================\n");
   updl_Info("Model: %s\n", config->model->model_name);
   updl_Info("Test samples: %d\n", config->num_samples);
 
@@ -241,7 +242,7 @@ updl_run_validation_tests(const updl_test_config_t *config) {
                 config->samples[0].layers[i].error_threshold * 100.0f);
     }
   }
-  updl_Info("========================================\n");
+  updl_Info("%s", "========================================\n");
 
   // Run tests for each sample
   for (size_t i = 0; i < config->num_samples; i++) {
@@ -276,10 +277,10 @@ void updl_print_test_report(const updl_test_report_t *report) {
     return;
   }
 
-  updl_Info("\n");
-  updl_Info("========================================\n");
-  updl_Info("  Test Report Summary\n");
-  updl_Info("========================================\n");
+  updl_Info("%s", "\n");
+  updl_Info("%s", "========================================\n");
+  updl_Info("%s", "  Test Report Summary\n");
+  updl_Info("%s", "========================================\n");
   updl_Info("Total tests:  %u (samples: %d, layers: %d)\n", report->total_tests,
             report->num_samples,
             report->total_tests > 0 ? report->total_tests / report->num_samples
@@ -290,5 +291,5 @@ void updl_print_test_report(const updl_test_report_t *report) {
             report->total_tests > 0
                 ? (float)report->tests_passed / report->total_tests * 100.0f
                 : 0.0f);
-  updl_Info("========================================\n\n");
+  updl_Info("%s", "========================================\n\n");
 }

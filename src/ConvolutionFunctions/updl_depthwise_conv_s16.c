@@ -3,6 +3,7 @@
 
 #include "updl/updl_kernels.h"
 #include "updl/updl_kernels_support.h"
+#include "updl/updl_nn_utils_udl.h"
 #include "updl/updl_operator.h"
 #include "updl/updl_utility.h"
 
@@ -32,7 +33,6 @@ uint8_t updl_depthwise_conv_64x3x3_s16_64x25x5(
     // Pre-compute zero-point corrections (hoisted out of loops)
     const int32_t input_zp_i32 = (int32_t)input_zp;
     const int32_t weight_zp_i32 = (int32_t)weight_zp;
-    const int32_t output_zp_i32 = (int32_t)output_zp;
 
     // Calculate padding once for all channels (stride=1, kernel=3x3)
     uint32_t pad_top = 0, pad_left = 0;
@@ -64,9 +64,7 @@ uint8_t updl_depthwise_conv_64x3x3_s16_64x25x5(
         const int32_t w20 = (int32_t)w_ch[6] - weight_zp_i32; // [2][0]
         const int32_t w21 = (int32_t)w_ch[7] - weight_zp_i32; // [2][1]
         const int32_t w22 = (int32_t)w_ch[8] - weight_zp_i32; // [2][2]
-        
-        // Pre-compute bias term
-        const int64_t scaled_bias = updl_scale_bias(bias[ch], eff_bias_multiplier, eff_bias_shift);
+        int16_t bias_val = bias ? bias[ch] : 0;
         
         // OPTIMIZATION 4: Spatial loop optimization - process row by row for better cache locality
         for (uint32_t out_y = 0; out_y < output_height; out_y++) {
@@ -96,31 +94,55 @@ uint8_t updl_depthwise_conv_64x3x3_s16_64x25x5(
                 
                 // Row 0: y-1
                 if (in_row0) {
-                    if (in_x0 >= 0 && in_x0 < 5) sum += (int64_t)((int32_t)in_row0[in_x0] - input_zp_i32) * w00;
-                    if (in_x1 >= 0 && in_x1 < 5) sum += (int64_t)((int32_t)in_row0[in_x1] - input_zp_i32) * w01;
-                    if (in_x2 >= 0 && in_x2 < 5) sum += (int64_t)((int32_t)in_row0[in_x2] - input_zp_i32) * w02;
+                    if (in_x0 >= 0 && in_x0 < 5) {
+                        sum += (int64_t)((int32_t)in_row0[in_x0] - input_zp_i32) * w00;
+                        sum = updl_udl_bound40(sum);
+                    }
+                    if (in_x1 >= 0 && in_x1 < 5) {
+                        sum += (int64_t)((int32_t)in_row0[in_x1] - input_zp_i32) * w01;
+                        sum = updl_udl_bound40(sum);
+                    }
+                    if (in_x2 >= 0 && in_x2 < 5) {
+                        sum += (int64_t)((int32_t)in_row0[in_x2] - input_zp_i32) * w02;
+                        sum = updl_udl_bound40(sum);
+                    }
                 }
                 
                 // Row 1: y
                 if (in_row1) {
-                    if (in_x0 >= 0 && in_x0 < 5) sum += (int64_t)((int32_t)in_row1[in_x0] - input_zp_i32) * w10;
-                    if (in_x1 >= 0 && in_x1 < 5) sum += (int64_t)((int32_t)in_row1[in_x1] - input_zp_i32) * w11;
-                    if (in_x2 >= 0 && in_x2 < 5) sum += (int64_t)((int32_t)in_row1[in_x2] - input_zp_i32) * w12;
+                    if (in_x0 >= 0 && in_x0 < 5) {
+                        sum += (int64_t)((int32_t)in_row1[in_x0] - input_zp_i32) * w10;
+                        sum = updl_udl_bound40(sum);
+                    }
+                    if (in_x1 >= 0 && in_x1 < 5) {
+                        sum += (int64_t)((int32_t)in_row1[in_x1] - input_zp_i32) * w11;
+                        sum = updl_udl_bound40(sum);
+                    }
+                    if (in_x2 >= 0 && in_x2 < 5) {
+                        sum += (int64_t)((int32_t)in_row1[in_x2] - input_zp_i32) * w12;
+                        sum = updl_udl_bound40(sum);
+                    }
                 }
                 
                 // Row 2: y+1
                 if (in_row2) {
-                    if (in_x0 >= 0 && in_x0 < 5) sum += (int64_t)((int32_t)in_row2[in_x0] - input_zp_i32) * w20;
-                    if (in_x1 >= 0 && in_x1 < 5) sum += (int64_t)((int32_t)in_row2[in_x1] - input_zp_i32) * w21;
-                    if (in_x2 >= 0 && in_x2 < 5) sum += (int64_t)((int32_t)in_row2[in_x2] - input_zp_i32) * w22;
+                    if (in_x0 >= 0 && in_x0 < 5) {
+                        sum += (int64_t)((int32_t)in_row2[in_x0] - input_zp_i32) * w20;
+                        sum = updl_udl_bound40(sum);
+                    }
+                    if (in_x1 >= 0 && in_x1 < 5) {
+                        sum += (int64_t)((int32_t)in_row2[in_x1] - input_zp_i32) * w21;
+                        sum = updl_udl_bound40(sum);
+                    }
+                    if (in_x2 >= 0 && in_x2 < 5) {
+                        sum += (int64_t)((int32_t)in_row2[in_x2] - input_zp_i32) * w22;
+                        sum = updl_udl_bound40(sum);
+                    }
                 }
                 
-                // Add pre-computed bias
-                sum += scaled_bias;
-
-                // OPTIMIZATION 7: Use optimized 5-function pipeline (eliminates 40,000 function calls)
-                output[ch_output_base + out_y * 5 + out_x] = updl_quantize_pipeline(
-                    sum, activation, eff_multiplier, eff_shift, output_zp);
+                output[ch_output_base + out_y * 5 + out_x] = updl_udl_finalize(
+                    sum, bias_val, activation, eff_multiplier, eff_shift, output_zp,
+                    eff_bias_multiplier, eff_bias_shift);
             }
         }
     }
@@ -193,16 +215,14 @@ uint8_t updl_depthwise_conv_s16(
                             int32_t inp = (int32_t)input_val - (int32_t)input_zp;
                             int32_t wgt = (int32_t)weight_val - (int32_t)weight_zp;
                             sum += (int64_t)inp * (int64_t)wgt;
+                            sum = updl_udl_bound40(sum);
                         }
                     }
 
-                    // Scale bias from bias_scale to accumulator scale using updl_scale_bias
-                    int64_t scaled_bias = updl_scale_bias(bias[output_ch], eff_bias_multiplier, eff_bias_shift);
-                    sum += scaled_bias;
-
-                    // CHW output indexing: output[output_ch][out_y][out_x] - use optimized pipeline
-                    output[output_ch_base + out_y * output_width + out_x] = updl_quantize_pipeline(
-                        sum, activation, eff_multiplier, eff_shift, output_zp);
+                    int16_t bias_val = bias ? bias[output_ch] : 0;
+                    output[output_ch_base + out_y * output_width + out_x] = updl_udl_finalize(
+                        sum, bias_val, activation, eff_multiplier, eff_shift, output_zp,
+                        eff_bias_multiplier, eff_bias_shift);
                 }
             }
         }
