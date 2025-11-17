@@ -51,8 +51,8 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
 
       // Use provided reusable buffer (no dynamic allocation)
       if (!ctx->dequant_buffer || output_size > ctx->dequant_buffer_size) {
-        updl_Error("ERROR: Dequant buffer too small for layer %s (need %zu, "
-                   "have %zu)\n",
+        updl_Error("ERROR: Dequant buffer too small for layer %s (need %d, "
+                   "have %d)\n",
                    golden->layer_name, output_size, ctx->dequant_buffer_size);
         return;
       }
@@ -67,28 +67,61 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
       updl_dequantize_int16_array(output, fp32_output, output_size,
                                   output_scale, output_zp);
 
-      // Compare with golden reference
-      result->metrics = updl_compare_fp32_arrays(
-          golden->golden_fp32, fp32_output, golden->output_size);
-
-      // Check if passed
-      float abs_mean_error = result->metrics.mean_error_rate < 0
-                                 ? -result->metrics.mean_error_rate
-                                 : result->metrics.mean_error_rate;
-      result->passed = (abs_mean_error <= golden->error_threshold);
+      // Compare with golden reference and count threshold violations
+      size_t pass_count = 0;
+      size_t fail_count = 0;
 
       if (ctx->verbose) {
         updl_Info("  Layer: %s (sample_idx=%d, layer_idx=%d)\n",
                   golden->layer_name, i, golden->layer_index);
-        updl_Info("    Mean Error: %.4f%%\n", abs_mean_error * 100.0f);
-        updl_Info("    Max Error:  %.4f%%\n",
-                  result->metrics.max_error_rate * 100.0f);
-        if (result->passed == false) {
-          updl_Error("    Result: %s\n", "FAIL");
+      }
+
+      // Check each sample against threshold
+      for (size_t idx = 0; idx < golden->output_size; idx++) {
+        float output_val = fp32_output[idx];
+        float golden_val = golden->golden_fp32[idx];
+        float error_rate = 0.0f;
+
+        if (golden_val != 0.0f) {
+          error_rate = (output_val - golden_val) / golden_val;
+          if (error_rate < 0) error_rate = -error_rate;
+        } else if (output_val != 0.0f) {
+          error_rate = 1.0f; // 100% error if golden is 0 but output is not
+        }
+
+        if (error_rate <= golden->error_threshold) {
+          pass_count++;
         } else {
-          updl_Info("    Result: %s\n", "PASS");
+          fail_count++;
+          // Log samples that exceed threshold (limit to first 10)
+          if (fail_count <= 10 && ctx->verbose) {
+            updl_Error("    Sample[%d] exceeds threshold: output=%.6f, "
+                      "golden=%.6f, error=%.4f%% (threshold=%.4f%%)\n",
+                      idx, output_val, golden_val, error_rate * 100.0f,
+                      golden->error_threshold * 100.0f);
+          }
         }
       }
+
+      // Store pass/fail status and feature counts
+      result->passed = (fail_count == 0);
+      result->total_features = golden->output_size;
+      result->features_passed = pass_count;
+      result->features_failed = fail_count;
+
+      if (ctx->verbose) {
+        updl_Info("    Layer %d (%s): %d/%d (%.2f%%) features pass\n",
+                  golden->layer_index, golden->layer_name,
+                  (int)pass_count, (int)golden->output_size,
+                  (100.0f * pass_count) / golden->output_size);
+        if (fail_count > 10) {
+          updl_Info("    (showing first 10 of %d failed features)\n", (int)fail_count);
+        }
+      }
+
+      // Still compute metrics for backward compatibility
+      result->metrics = updl_compare_fp32_arrays(
+          golden->golden_fp32, fp32_output, golden->output_size);
 
       // Buffer is reused, no free needed
       break; // Found and processed this layer
@@ -248,10 +281,6 @@ updl_run_validation_tests(const updl_test_config_t *config) {
   for (size_t i = 0; i < config->num_samples; i++) {
     report->sample_results[i] =
         test_single_sample(config, &config->samples[i], (uint32_t)i);
-
-    report->total_tests += config->samples[i].num_layers;
-    report->tests_passed += report->sample_results[i].layers_passed;
-    report->tests_failed += report->sample_results[i].layers_failed;
   }
 
   return report;
@@ -277,19 +306,6 @@ void updl_print_test_report(const updl_test_report_t *report) {
     return;
   }
 
-  updl_Info("%s", "\n");
-  updl_Info("%s", "========================================\n");
-  updl_Info("%s", "  Test Report Summary\n");
-  updl_Info("%s", "========================================\n");
-  updl_Info("Total tests:  %u (samples: %d, layers: %d)\n", report->total_tests,
-            report->num_samples,
-            report->total_tests > 0 ? report->total_tests / report->num_samples
-                                    : 0);
-  updl_Info("Passed:       %u\n", report->tests_passed);
-  updl_Error("Failed:       %u\n", report->tests_failed);
-  updl_Info("Success rate: %.1f%%\n",
-            report->total_tests > 0
-                ? (float)report->tests_passed / report->total_tests * 100.0f
-                : 0.0f);
-  updl_Info("%s", "========================================\n\n");
+  // No summary needed - all details already shown during layer-by-layer testing
+  (void)report;
 }

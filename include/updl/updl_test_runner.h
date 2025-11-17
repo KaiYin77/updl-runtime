@@ -75,6 +75,11 @@ typedef struct {
   uint16_t layer_index;
   updl_test_metrics_t metrics;
   bool passed;
+
+  // Feature-level statistics
+  size_t total_features;    // Total features in this layer
+  size_t features_passed;   // Features within threshold
+  size_t features_failed;   // Features exceeding threshold
 } updl_layer_result_t;
 
 /**
@@ -94,10 +99,6 @@ typedef struct {
 typedef struct {
   updl_sample_result_t *sample_results; // Array of sample results
   size_t num_samples;
-
-  uint32_t total_tests; // Total layer tests (samples * layers)
-  uint32_t tests_passed;
-  uint32_t tests_failed;
 } updl_test_report_t;
 
 // ============================================================================
