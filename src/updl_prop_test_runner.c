@@ -5,7 +5,7 @@
 // INCLUDES
 // ============================================================================
 
-#include <updl/updl_test_runner.h>
+#include <updl/updl_prop_test_runner.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,7 +63,7 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
       float output_scale = layer->act_scale;
       int16_t output_zp = layer->act_zp;
 
-      // Dequantize int16 to fp32
+      // Dequantize int16 to fp32 for comparison
       updl_dequantize_int16_array(output, fp32_output, output_size,
                                   output_scale, output_zp);
 
@@ -72,21 +72,29 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
       size_t fail_count = 0;
 
       if (ctx->verbose) {
-        updl_Info("  Layer: %s (sample_idx=%d, layer_idx=%d)\n",
-                  golden->layer_name, i, golden->layer_index);
+        updl_Info("  Testing Layer %d: %s\n", golden->layer_index,
+                  golden->layer_name);
       }
 
       // Check each sample against threshold
       for (size_t idx = 0; idx < golden->output_size; idx++) {
-        float output_val = fp32_output[idx];
-        float golden_val = golden->golden_fp32[idx];
-        float error_rate = 0.0f;
+        // Get int16 values for comparison
+        int16_t actual_int16 = output[idx];
 
-        if (golden_val != 0.0f) {
-          error_rate = (output_val - golden_val) / golden_val;
+        // Quantize golden fp32 to int16 for comparison
+        int16_t golden_int16 = (int16_t)((golden->golden_fp32[idx] / output_scale) + 0.5f);
+
+        // Get fp32 values for display
+        float actual_fp32 = fp32_output[idx];
+        float golden_fp32 = golden->golden_fp32[idx];
+
+        // Calculate error rate based on fp32 values (using scale)
+        float error_rate = 0.0f;
+        if (golden_fp32 != 0.0f) {
+          error_rate = (actual_fp32 - golden_fp32) / golden_fp32;
           if (error_rate < 0) error_rate = -error_rate;
-        } else if (output_val != 0.0f) {
-          error_rate = 1.0f; // 100% error if golden is 0 but output is not
+        } else if (actual_fp32 != 0.0f) {
+          error_rate = 1.0f; // 100% error if golden is 0 but actual is not
         }
 
         if (error_rate <= golden->error_threshold) {
@@ -95,10 +103,9 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
           fail_count++;
           // Log samples that exceed threshold (limit to first 10)
           if (fail_count <= 10 && ctx->verbose) {
-            updl_Error("    Sample[%d] exceeds threshold: output=%.6f, "
-                      "golden=%.6f, error=%.4f%% (threshold=%.4f%%)\n",
-                      idx, output_val, golden_val, error_rate * 100.0f,
-                      golden->error_threshold * 100.0f);
+            updl_Error("  [%s] output[%d] = int16(actual=0x%04x, golden=0x%04x), fp32(actual=%.6f, golden=%.6f), error=%.4f%%\n",
+                       golden->layer_name, (int)idx, (uint16_t)actual_int16, (uint16_t)golden_int16,
+                       actual_fp32, golden_fp32, error_rate * 100.0f);
           }
         }
       }
@@ -110,13 +117,12 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
       result->features_failed = fail_count;
 
       if (ctx->verbose) {
-        updl_Info("    Layer %d (%s): %d/%d (%.2f%%) features pass\n",
-                  golden->layer_index, golden->layer_name,
-                  (int)pass_count, (int)golden->output_size,
-                  (100.0f * pass_count) / golden->output_size);
         if (fail_count > 10) {
-          updl_Info("    (showing first 10 of %d failed features)\n", (int)fail_count);
+          updl_Info("  (showing first 10 of %d failed features)\n", (int)fail_count);
         }
+        updl_Info("  [%s] Result: %d/%d (%.2f%%) features pass\n",
+                  golden->layer_name, (int)pass_count, (int)golden->output_size,
+                  (100.0f * pass_count) / golden->output_size);
       }
 
       // Still compute metrics for backward compatibility
@@ -149,7 +155,7 @@ static updl_sample_result_t test_single_sample(const updl_test_config_t *config,
   }
 
   if (config->verbose) {
-    updl_Info("\n--- Sample %u ---\n", sample_idx);
+    updl_Info("=== Sample %u ===\n", sample_idx);
   }
 
   // Quantize input from fp32 to int16

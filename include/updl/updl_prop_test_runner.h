@@ -1,8 +1,26 @@
 /* Copyright 2025 Upbeat, Inc */
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#ifndef UPDL_TEST_RUNNER_H
-#define UPDL_TEST_RUNNER_H
+/*
+ * UPDL Propagation Test Runner - Full Pipeline Validation with Error Propagation
+ *
+ * This test runner validates the full inference pipeline by running layers sequentially.
+ * Errors propagate from layer to layer, testing the complete end-to-end accuracy.
+ *
+ * Key Characteristics:
+ * - Runs FULL inference (all layers sequentially)
+ * - Error PROPAGATES from layer N to layer N+1
+ * - Compares dequantized FP32 output with FP32 golden reference
+ * - Tests real-world inference behavior
+ *
+ * Contrast with Quantization Test Runner (updl_quant_test_runner.h):
+ * - Quant runner tests layers IN ISOLATION (no error propagation)
+ * - Quant runner uses golden FP32 input for each layer
+ * - Quant runner compares in INT16 domain
+ */
+
+#ifndef UPDL_PROP_TEST_RUNNER_H
+#define UPDL_PROP_TEST_RUNNER_H
 
 // ============================================================================
 // INCLUDES
@@ -17,7 +35,7 @@
 #include <updl/updl_test_utils.h>
 
 // ============================================================================
-// TEST DATA INTERFACE (Model-agnostic)
+// PROPAGATION TEST DATA INTERFACE (Model-agnostic)
 // ============================================================================
 
 /**
@@ -130,4 +148,4 @@ void updl_free_test_report(updl_test_report_t *report);
  */
 void updl_print_test_report(const updl_test_report_t *report);
 
-#endif // UPDL_TEST_RUNNER_H
+#endif // UPDL_PROP_TEST_RUNNER_H

@@ -134,8 +134,8 @@ const char *updl_get_layer_type_name(ltype_t type) {
 }
 
 int updl_execute_single_layer(updl_executor_t *executor, uint16_t layer_idx,
-                               const int16_t *layer_input,
-                               int16_t *layer_output) {
+                              const int16_t *layer_input,
+                              int16_t *layer_output) {
   const updl_model_t *model = executor->model;
   const updl_layer_t *layer = &model->layers[layer_idx];
   updl_exec_layer_t *exec_layer = &executor->exec_layers[layer_idx];
@@ -172,7 +172,8 @@ int updl_execute_single_layer(updl_executor_t *executor, uint16_t layer_idx,
   case Ltype_flatten:
     // Flatten is just a reshape - copy data
     if (exec_layer->input_size > 0) {
-      memcpy(layer_output, layer_input, exec_layer->input_size * sizeof(int16_t));
+      memcpy(layer_output, layer_input,
+             exec_layer->input_size * sizeof(int16_t));
     }
     result = 0;
     break;
@@ -253,7 +254,8 @@ updl_run_impl_tests(const updl_impl_test_config_t *config) {
   for (size_t sample_idx = 0; sample_idx < config->num_test_inputs;
        sample_idx++) {
     const updl_impl_test_input_t *test_input = &config->test_inputs[sample_idx];
-    updl_Info("Sample %d/%d:\n", (int)(sample_idx + 1), (int)config->num_test_inputs);
+    updl_Info("Sample %d/%d:\n", (int)(sample_idx + 1),
+              (int)config->num_test_inputs);
 
     // Quantize input to int16 using model's quantization parameters
     size_t input_size = test_input->input_size;
@@ -314,8 +316,8 @@ updl_run_impl_tests(const updl_impl_test_config_t *config) {
                   mode, (void *)buffer_hw, (void *)buffer_temp);
       }
 
-      int hw_result =
-          updl_execute_single_layer(executor, layer_idx, buffer_hw, buffer_temp);
+      int hw_result = updl_execute_single_layer(executor, layer_idx, buffer_hw,
+                                                buffer_temp);
 
       if (hw_result != 0) {
         const char *mode = has_hw_support ? "HW" : "SW";
@@ -339,8 +341,8 @@ updl_run_impl_tests(const updl_impl_test_config_t *config) {
                   (void *)buffer_sw, (void *)buffer_temp);
       }
 
-      int sw_result =
-          updl_execute_single_layer(executor, layer_idx, buffer_sw, buffer_temp);
+      int sw_result = updl_execute_single_layer(executor, layer_idx, buffer_sw,
+                                                buffer_temp);
 
       if (sw_result != 0) {
         updl_Error("  Layer %2d: ERROR - SW execution failed (result=%d)\n",
@@ -352,11 +354,12 @@ updl_run_impl_tests(const updl_impl_test_config_t *config) {
 
       // Debug: Print first few values from SW output (first sample only)
       if (layer_idx == 0 && sample_idx == 0 && config->verbose) {
-        updl_Info("  Layer %2d SW output (first 5): 0x%04x 0x%04x 0x%04x 0x%04x "
-                  "0x%04x\n",
-                  layer_idx, (uint16_t)buffer_temp[0], (uint16_t)buffer_temp[1],
-                  (uint16_t)buffer_temp[2], (uint16_t)buffer_temp[3],
-                  (uint16_t)buffer_temp[4]);
+        updl_Info(
+            "  Layer %2d SW output (first 5): 0x%04x 0x%04x 0x%04x 0x%04x "
+            "0x%04x\n",
+            layer_idx, (uint16_t)buffer_temp[0], (uint16_t)buffer_temp[1],
+            (uint16_t)buffer_temp[2], (uint16_t)buffer_temp[3],
+            (uint16_t)buffer_temp[4]);
       }
 
       // Print comparison labels based on HW support
@@ -400,17 +403,16 @@ updl_run_impl_tests(const updl_impl_test_config_t *config) {
   updl_Info("Implementation Test Summary\n");
   updl_Info("========================================\n");
   updl_Info("Total layers compared: %u\n", stats.total_layers_compared);
-  updl_Info("Layers matched:        %u (%.1f%%)\n", stats.layers_matched,
-            100.0f * stats.layers_matched / (float)stats.total_layers_compared);
-  updl_Error("Layers mismatched:     %u (%.1f%%)\n", stats.layers_mismatched,
-             100.0f * stats.layers_mismatched / (float)stats.total_layers_compared);
-  updl_Info("\n");
 
   if (stats.layers_mismatched == 0) {
-    updl_Info("SUCCESS: UDL-accelerated vs Pure-software implementations match "
-              "perfectly!\n");
+    updl_Info("Layers matched:        %u (%.1f%%)\n", stats.layers_matched,
+              100.0f * stats.layers_matched /
+                  (float)stats.total_layers_compared);
+
   } else {
-    updl_Error("FAILURE: Found %u layer mismatches.\n", stats.layers_mismatched);
+    updl_Error("Layers mismatched:     %u (%.1f%%)\n", stats.layers_mismatched,
+               100.0f * stats.layers_mismatched /
+                   (float)stats.total_layers_compared);
   }
   updl_Info("========================================\n");
 
