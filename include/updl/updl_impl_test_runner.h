@@ -130,6 +130,6 @@ int updl_execute_single_layer(updl_executor_t *executor, uint16_t layer_idx,
  * @param config  Test configuration with model, executor, and test inputs
  * @return        Test statistics with match/mismatch counts
  */
-updl_impl_test_stats_t updl_run_impl_tests(const updl_impl_test_config_t *config);
+updl_impl_test_stats_t updl_run_implementation_tests(const updl_impl_test_config_t *config);
 
 #endif // UPDL_IMPL_TEST_RUNNER_H

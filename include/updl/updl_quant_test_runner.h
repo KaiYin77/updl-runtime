@@ -14,7 +14,11 @@
 
 #include <updl/updl_interpreter.h>
 #include <updl/updl_operator.h>
-#include <updl/updl_test_utils.h>
+#include <updl/updl_test_runner_utils.h>
+
+// ============================================================================
+// QUANTIZATION TEST DATA INTERFACE (Model-agnostic)
+// ============================================================================
 
 // ============================================================================
 // QUANTIZATION TEST DATA INTERFACE (Model-agnostic)
@@ -36,30 +40,8 @@ typedef struct {
   float error_threshold;          // Acceptable error rate (e.g., 0.005 = 0.5%)
 } updl_layer_quant_config_t;
 
-/**
- * Layer quantization test structure (per-sample)
- *
- * This structure defines a single layer to test in ISOLATION:
- * - Takes FP32 golden input, quantizes to int16
- * - Executes ONLY this layer
- * - Compares int16 output with int16 golden (quantized from FP32)
- * - Prevents error propagation by using golden input for each layer
- */
-typedef struct {
-  const char *layer_name; // Layer name (e.g., "activation", "flatten")
-  uint16_t layer_index;   // Layer index in model
-
-  // Input golden reference (FP32)
-  const float *input_golden_fp32; // Expected FP32 input to this layer
-  size_t input_size;              // Input size
-
-  // Output golden reference (FP32)
-  const float *output_golden_fp32; // Expected FP32 output from this layer
-  size_t output_size;              // Output size
-
-  float error_threshold; // Acceptable error rate in int16 domain (e.g., 0.05 =
-                         // 5%)
-} updl_layer_quant_golden_t;
+// Use unified types from updl_test_runner_utils.h
+typedef updl_test_layer_golden_t updl_layer_quant_golden_t;
 
 /**
  * Quantization test sample structure
@@ -100,31 +82,9 @@ typedef struct {
 // TEST RESULTS (Model-agnostic)
 // ============================================================================
 
-/**
- * Per-layer quantization test result
- */
-typedef struct {
-  const char *layer_name;
-  uint16_t layer_index;
-
-  bool passed;
-
-  // Feature-level statistics (in int16 domain)
-  size_t total_features;  // Total features in this layer
-  size_t features_passed; // Features within threshold
-  size_t features_failed; // Features exceeding threshold
-} updl_layer_quant_result_t;
-
-/**
- * Per-sample quantization test result
- */
-typedef struct {
-  uint32_t sample_index;
-  updl_layer_quant_result_t *layer_results; // Array of layer results
-  size_t num_layers;
-  uint32_t layers_passed;
-  uint32_t layers_failed;
-} updl_sample_quant_result_t;
+// Use unified types from updl_test_runner_utils.h
+typedef updl_test_layer_result_t updl_layer_quant_result_t;
+typedef updl_test_sample_result_t updl_sample_quant_result_t;
 
 /**
  * Overall quantization test report
