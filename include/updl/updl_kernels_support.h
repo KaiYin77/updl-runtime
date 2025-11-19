@@ -140,8 +140,8 @@ uint8_t updl_global_avg_pool_s16(int16_t *input, int16_t *output,
 // ============================================================================
 
 uint8_t updl_softmax_s16(int16_t *input, int16_t *output, uint32_t size,
-                         int32_t eff_multiplier, int16_t eff_shift,
-                         int16_t input_zp, int16_t output_zp);
+                         float input_scale, int16_t input_zp,
+                         float output_scale, int16_t output_zp);
 
 // ============================================================================
 // UTILITY FUNCTIONS

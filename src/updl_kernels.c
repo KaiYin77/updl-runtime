@@ -370,6 +370,6 @@ uint8_t updl_softmax(updl_executor_t *executor, const updl_layer_t *layer, updl_
     return updl_softmax_s16((int16_t *)exec_layer->input_ptr,
                            (int16_t *)exec_layer->output_ptr,
                            size,
-                           layer->effective_multiplier, layer->effective_shift,
-                           layer->input_zp, layer->output_zp);
+                           layer->input_scale, layer->input_zp,
+                           layer->act_scale, layer->act_zp);
 }

@@ -133,6 +133,7 @@ updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
 #endif
 
     // Store quantization parameters for kernel use
+    layer->input_scale = input_scale;  // Store input scale for layers that need it (e.g., softmax)
     layer->input_zp = input_zp;
     layer->output_zp = output_zp;
     layer->weight_zp = weight_zp;
