@@ -19,6 +19,7 @@
 #define ANSI_RED "\033[31m"
 #define ANSI_MAGENTA "\033[35m"
 #define ANSI_WHITE "\033[37m"
+#define ANSI_YELLOW "\033[33m"
 #define ANSI_GRAY "\033[38:5:250m"
 #define ANSI_ORANGE "\033[38;2;217;120;88m"
 
@@ -28,7 +29,7 @@
 /* Color definitions for log levels */
 #define COLOR_DEBUG ANSI_BLUE
 #define COLOR_INFO ANSI_WHITE
-#define COLOR_WARNING ANSI_GRAY
+#define COLOR_WARNING ANSI_YELLOW
 #define COLOR_ERROR ANSI_RED
 #define COLOR_HIGHLIGHT ANSI_ORANGE
 

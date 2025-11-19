@@ -110,7 +110,7 @@ updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
 #ifdef UPDL_UDL_SHIFT_ONLY_MODE
     // Verify UDL mode constraint: multiplier must be 1
     if (eff.multiplier != 1) {
-      updl_Error("[UPDL][ERROR] UDL mode violation: multiplier=%d (expected 1) "
+      updl_Error("UDL mode violation: multiplier=%d (expected 1) "
                  "for eff_scale=%f\n",
                  eff.multiplier, eff_scale);
     }
@@ -126,7 +126,7 @@ updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
 #ifdef UPDL_UDL_SHIFT_ONLY_MODE
     // Verify UDL mode constraint: bias multiplier must be 1
     if (eff_bias.multiplier != 1) {
-      updl_Error("[UPDL][ERROR] UDL bias mode violation: multiplier=%d "
+      updl_Error("UDL bias mode violation: multiplier=%d "
                  "(expected 1) for eff_bias_scale=%f\n",
                  eff_bias.multiplier, eff_bias_scale);
     }

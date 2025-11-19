@@ -277,7 +277,7 @@ bool updl_validate_layer_output(const int16_t *actual, const float *golden_fp32,
       (*fail_count)++;
       // Log samples that exceed threshold (limit to first 10)
       if (*fail_count <= 10 && verbose) {
-        updl_Error("  [%s] output[%d] = int16(actual=0x%04x, golden=0x%04x), "
+        updl_Warning("  [%s] output[%d] = int16(actual=0x%04x, golden=0x%04x), "
                    "fp32(actual=%.6f, golden=%.6f), error=%.4f%%\n",
                    layer_name, (int)i, actual_val, golden_val_int16,
                    actual_fp32, golden_val_fp32, error_rate * 100.0f);
@@ -333,7 +333,7 @@ void updl_compare_int16_buffers(const char *layer_name, uint16_t layer_idx,
               layer_name, (int)size);
     (*matched)++;
   } else {
-    updl_Error("  Layer %2d (%15s): FAIL - %u/%d mismatches (max_diff=%d, "
+    updl_Warning("  Layer %2d (%15s): FAIL - %u/%d mismatches (max_diff=%d, "
                "first@%d: output_1=%d "
                "output_2=%d)\n",
                layer_idx, layer_name, mismatch_count, (int)size, max_diff,
