@@ -128,13 +128,15 @@ static bool compare_int16_with_scale(const int16_t *actual,
   *fail_count = 0;
 
   for (size_t i = 0; i < size; i++) {
+    // Get int16 values for comparison (both already quantized)
     int16_t actual_val = actual[i];
     int16_t golden_val = golden[i];
 
-    // Compute error in fp32 domain (using scale)
+    // Convert int16 values to fp32 using scale (int16 domain baseline)
     float actual_fp32 = (float)actual_val * scale;
     float golden_fp32 = (float)golden_val * scale;
 
+    // Calculate error rate based on int16 domain (converted to fp32 using scale)
     float error_rate = 0.0f;
     if (golden_fp32 != 0.0f) {
       error_rate = (actual_fp32 - golden_fp32) / golden_fp32;

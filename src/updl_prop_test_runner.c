@@ -84,18 +84,21 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
         // Quantize golden fp32 to int16 for comparison
         int16_t golden_int16 = (int16_t)((golden->golden_fp32[idx] / output_scale) + 0.5f);
 
-        // Get fp32 values for display
-        float actual_fp32 = fp32_output[idx];
-        float golden_fp32 = golden->golden_fp32[idx];
+        // Convert int16 values to fp32 using scale (int16 domain baseline)
+        float actual_fp32 = (float)actual_int16 * output_scale;
+        float golden_fp32_from_int16 = (float)golden_int16 * output_scale;
 
-        // Calculate error rate based on fp32 values (using scale)
+        // Calculate error rate based on int16 domain (converted to fp32 using scale)
         float error_rate = 0.0f;
-        if (golden_fp32 != 0.0f) {
-          error_rate = (actual_fp32 - golden_fp32) / golden_fp32;
+        if (golden_fp32_from_int16 != 0.0f) {
+          error_rate = (actual_fp32 - golden_fp32_from_int16) / golden_fp32_from_int16;
           if (error_rate < 0) error_rate = -error_rate;
         } else if (actual_fp32 != 0.0f) {
           error_rate = 1.0f; // 100% error if golden is 0 but actual is not
         }
+
+        // Get original golden fp32 for display
+        float golden_fp32 = golden->golden_fp32[idx];
 
         if (error_rate <= golden->error_threshold) {
           pass_count++;
