@@ -37,7 +37,6 @@ typedef struct {
   size_t input_size;              // Input size per sample
   const void *output_golden_data; // Pointer to 2D array [num_samples][output_size]
   size_t output_size;             // Output size per sample
-  float error_threshold;          // Acceptable error rate (e.g., 0.005 = 0.5%)
 } updl_layer_quant_config_t;
 
 // Use unified types from updl_test_runner_utils.h

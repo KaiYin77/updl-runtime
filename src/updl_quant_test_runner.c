@@ -57,7 +57,6 @@ void updl_init_quant_test_data(const updl_layer_quant_config_t *layer_configs,
           (const float *)config->output_golden_data +
           (sample_idx * config->output_size);
       layer_golden->output_size = config->output_size;
-      layer_golden->error_threshold = config->error_threshold;
     }
 
     // Initialize sample
@@ -143,8 +142,7 @@ updl_run_quantization_tests(const updl_quant_test_config_t *config) {
             .input_golden_fp32 = layer_golden->input_golden_fp32,
             .input_size = layer_golden->input_size,
             .output_golden_fp32 = layer_golden->output_golden_fp32,
-            .output_size = layer_golden->output_size,
-            .error_threshold = layer_golden->error_threshold
+            .output_size = layer_golden->output_size
         };
         
         // Determine input for this layer

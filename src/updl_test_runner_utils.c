@@ -8,8 +8,8 @@
 #include <updl/updl_test_runner_utils.h>
 
 #include <math.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <updl/updl_kernels.h>
 #include <updl/updl_operator.h>
@@ -65,49 +65,6 @@ void updl_dequantize_int16_array(const int16_t *int16_array, float *fp32_array,
     fp32_array[i] =
         updl_dequantize_int16_to_fp32(int16_array[i], scale, zero_point);
   }
-}
-
-// ============================================================================
-// COMPARISON FUNCTIONS
-// ============================================================================
-
-updl_test_metrics_t updl_compare_fp32_arrays(const float *golden_array,
-                                             const float *test_array,
-                                             size_t size) {
-  updl_test_metrics_t metrics = {0};
-
-  if (!golden_array || !test_array || size == 0) {
-    return metrics;
-  }
-
-  metrics.num_samples = size;
-  float sum_error_rate = 0.0f;
-  float max_error_rate = 0.0f;
-
-  for (size_t i = 0; i < size; i++) {
-    float golden = golden_array[i];
-    float test = test_array[i];
-
-    // Skip if golden value is zero (avoid division by zero)
-    if (fabsf(golden) < 1e-10f) {
-      continue;
-    }
-
-    // Calculate error rate: (test - golden) / golden
-    float error_rate = (test - golden) / golden;
-    float abs_error_rate = fabsf(error_rate);
-
-    sum_error_rate += error_rate;
-
-    if (abs_error_rate > max_error_rate) {
-      max_error_rate = abs_error_rate;
-    }
-  }
-
-  metrics.mean_error_rate = sum_error_rate / (float)size;
-  metrics.max_error_rate = max_error_rate;
-
-  return metrics;
 }
 
 // ============================================================================
@@ -223,20 +180,21 @@ int updl_execute_single_layer(updl_executor_t *executor, uint16_t layer_idx,
 // ============================================================================
 
 bool updl_validate_layer_output(const int16_t *actual, const float *golden_fp32,
-                                size_t size, float scale, float threshold,
-                                bool verbose, const char *layer_name,
-                                size_t *pass_count, size_t *fail_count,
+                                size_t size, float scale, bool verbose,
+                                const char *layer_name,
                                 updl_test_metrics_t *metrics) {
-  *pass_count = 0;
-  *fail_count = 0;
-
   if (metrics) {
     memset(metrics, 0, sizeof(updl_test_metrics_t));
     metrics->num_samples = size;
   }
 
-  float sum_error_rate = 0.0f;
-  float max_error_rate = 0.0f;
+  size_t matched = 0;
+  size_t diff_1 = 0;
+  size_t diff_2plus = 0;
+  int16_t max_error = 0;
+  int16_t max_error_actual = 0;
+  int16_t max_error_golden = 0;
+  size_t logged_errors = 0;
 
   for (size_t i = 0; i < size; i++) {
     // Get int16 values for comparison
@@ -244,57 +202,74 @@ bool updl_validate_layer_output(const int16_t *actual, const float *golden_fp32,
     float golden_val_fp32 = golden_fp32[i];
 
     // Quantize golden fp32 to int16 for comparison (simulate int16 domain)
-    // Note: We use simple rounding here as per standard quantization
     int16_t golden_val_int16 = (int16_t)((golden_val_fp32 / scale) + 0.5f);
 
-    // Convert int16 values to fp32 using scale (int16 domain baseline)
-    float actual_fp32 = (float)actual_val * scale;
-    float golden_fp32_from_int16 = (float)golden_val_int16 * scale;
-
-    // Calculate error rate based on int16 domain (converted to fp32 using scale)
-    float error_rate = 0.0f;
-    if (golden_fp32_from_int16 != 0.0f) {
-      error_rate =
-          (actual_fp32 - golden_fp32_from_int16) / golden_fp32_from_int16;
-      if (error_rate < 0)
-        error_rate = -error_rate;
-    } else if (actual_fp32 != 0.0f) {
-      error_rate = 1.0f; // 100% error if golden is 0 but actual is not
+    // Calculate absolute error in int16 domain
+    int16_t abs_error = (int16_t)(actual_val - golden_val_int16);
+    if (abs_error < 0) {
+      abs_error = -abs_error;
     }
 
-    // Update metrics if requested
-    if (metrics) {
-      sum_error_rate += (actual_fp32 - golden_fp32_from_int16) /
-                        (golden_fp32_from_int16 != 0.0f ? golden_fp32_from_int16 : 1.0f); // Approximate signed error for mean
-      if (error_rate > max_error_rate) {
-        max_error_rate = error_rate;
-      }
-    }
-
-    if (error_rate <= threshold) {
-      (*pass_count)++;
+    // Categorize into buckets
+    if (abs_error == 0) {
+      matched++;
+    } else if (abs_error == 1) {
+      diff_1++;
     } else {
-      (*fail_count)++;
-      // Log samples that exceed threshold (limit to first 10)
-      if (*fail_count <= 10 && verbose) {
-        updl_Warning("  [%s] output[%d] = int16(actual=0x%04x, golden=0x%04x), "
-                   "fp32(actual=%.6f, golden=%.6f), error=%.4f%%\n",
-                   layer_name, (int)i, actual_val, golden_val_int16,
-                   actual_fp32, golden_val_fp32, error_rate * 100.0f);
+      diff_2plus++;
+      // Log samples with 2+ errors (limit to first 10)
+      if (logged_errors < 10 && verbose) {
+        float actual_fp32 = (float)actual_val * scale;
+        float fp32_error = actual_fp32 - golden_val_fp32;
+        float error_rate =
+            (golden_val_fp32 != 0.0f) ? (fp32_error / golden_val_fp32) : 0.0f;
+
+        updl_Warning(
+            "  [%s] out[%d] = i16(err=%d, compute=0x%04x, golden=0x%04x), "
+            "fp32(err=%.6f, err_ratio=%.4f%%, compute=%.6f, golden=%.6f)\n",
+            layer_name, (int)i, abs_error, actual_val, golden_val_int16,
+            fp32_error, error_rate * 100.0f, actual_fp32, golden_val_fp32);
+        logged_errors++;
       }
+    }
+
+    // Track max error and its values
+    if (abs_error > max_error) {
+      max_error = abs_error;
+      max_error_actual = actual_val;
+      max_error_golden = golden_val_int16;
     }
   }
 
+  // Store metrics
   if (metrics) {
-    metrics->mean_error_rate = sum_error_rate / (float)size;
-    metrics->max_error_rate = max_error_rate;
+    metrics->matched = matched;
+    metrics->diff_1bit = diff_1;
+    metrics->diff_2plus_bits = diff_2plus;
+    metrics->max_error_bits = max_error;
   }
 
-  if (verbose && *fail_count > 10) {
-    updl_Info("  (showing first 10 of %d mismatched features)\n", (int)*fail_count);
+  // Print distribution with percentages
+  if (verbose) {
+    float matched_pct = (size > 0) ? (100.0f * matched / size) : 0.0f;
+    float diff_1_pct = (size > 0) ? (100.0f * diff_1 / size) : 0.0f;
+    float diff_2plus_pct = (size > 0) ? (100.0f * diff_2plus / size) : 0.0f;
+
+    updl_Info("  [%s] Report: matched=%d/%d(%.1f%%), abs(1)=%d/%d(%.1f%%), "
+              "abs(2+)=%d/%d(%.1f%%), abs(max_err)=%d(0x%04x, 0x%04x)\n",
+              layer_name, (int)matched, (int)size, matched_pct, (int)diff_1,
+              (int)size, diff_1_pct, (int)diff_2plus, (int)size, diff_2plus_pct,
+              max_error, (uint16_t)max_error_actual,
+              (uint16_t)max_error_golden);
   }
 
-  return (*fail_count == 0);
+  if (verbose && logged_errors > 0 && diff_2plus > 10) {
+    updl_Info("  (showing first 10 of %d features with abs(2+) errors)\n",
+              (int)diff_2plus);
+  }
+
+  // Consider pass if all are exact match or abs(1) difference
+  return (diff_2plus == 0);
 }
 
 void updl_compare_int16_buffers(const char *layer_name, uint16_t layer_idx,
@@ -309,36 +284,64 @@ void updl_compare_int16_buffers(const char *layer_name, uint16_t layer_idx,
             (uint16_t)buffer2[0], (uint16_t)buffer2[1], (uint16_t)buffer2[2],
             (uint16_t)buffer2[3], (uint16_t)buffer2[4]);
 
-  uint32_t mismatch_count = 0;
+  // Categorize differences into 3 buckets
+  size_t exact_match = 0;
+  size_t diff_1 = 0;
+  size_t diff_2plus = 0;
   int32_t max_diff = 0;
+  int16_t max_diff_val1 = 0;
+  int16_t max_diff_val2 = 0;
   size_t first_mismatch_idx = 0;
   bool found_first_mismatch = false;
 
   for (size_t i = 0; i < size; i++) {
-    if (buffer1[i] != buffer2[i]) {
-      int32_t diff = abs(buffer1[i] - buffer2[i]);
-      if (diff > max_diff) {
-        max_diff = diff;
-      }
+    int32_t diff = abs(buffer1[i] - buffer2[i]);
+
+    // Categorize into buckets
+    if (diff == 0) {
+      exact_match++;
+    } else if (diff == 1) {
+      diff_1++;
+    } else {
+      diff_2plus++;
       if (!found_first_mismatch) {
         first_mismatch_idx = i;
         found_first_mismatch = true;
       }
-      mismatch_count++;
+    }
+
+    if (diff > max_diff) {
+      max_diff = diff;
+      max_diff_val1 = buffer1[i];
+      max_diff_val2 = buffer2[i];
     }
   }
 
-  if (mismatch_count == 0) {
-    updl_Info("  Layer %2d (%15s): PASS - All %d values match\n", layer_idx,
-              layer_name, (int)size);
+  // Calculate percentages
+  float matched_pct = (size > 0) ? (100.0f * exact_match / size) : 0.0f;
+  float diff_1_pct = (size > 0) ? (100.0f * diff_1 / size) : 0.0f;
+  float diff_2plus_pct = (size > 0) ? (100.0f * diff_2plus / size) : 0.0f;
+
+  // Report distribution
+  if (diff_2plus == 0) {
+    updl_Info("  Layer %2d (%15s): PASS - matched=%d/%d(%.1f%%), "
+              "abs(1)=%d/%d(%.1f%%), abs(2+)=%d/%d(%.1f%%), "
+              "abs(max_error)=%d(0x%04x, 0x%04x)\n",
+              layer_idx, layer_name, (int)exact_match, (int)size, matched_pct,
+              (int)diff_1, (int)size, diff_1_pct, (int)diff_2plus, (int)size,
+              diff_2plus_pct, max_diff, (uint16_t)max_diff_val1,
+              (uint16_t)max_diff_val2);
     (*matched)++;
   } else {
-    updl_Warning("  Layer %2d (%15s): FAIL - %u/%d mismatches (max_diff=%d, "
-               "first@%d: output_1=%d "
-               "output_2=%d)\n",
-               layer_idx, layer_name, mismatch_count, (int)size, max_diff,
-               (int)first_mismatch_idx, buffer1[first_mismatch_idx],
-               buffer2[first_mismatch_idx]);
+    updl_Warning("  Layer %2d (%15s): FAIL - matched=%d/%d(%.1f%%), "
+                 "abs(1)=%d/%d(%.1f%%), abs(2+)=%d/%d(%.1f%%), "
+                 "abs(max_error)=%d(0x%04x, 0x%04x), "
+                 "first@%d\n",
+                 layer_idx, layer_name, (int)exact_match, (int)size,
+                 matched_pct, (int)diff_1, (int)size, diff_1_pct,
+                 (int)diff_2plus, (int)size, diff_2plus_pct, max_diff,
+                 (uint16_t)max_diff_val1, (uint16_t)max_diff_val2,
+                 (int)first_mismatch_idx);
     (*mismatched)++;
   }
 }
@@ -347,11 +350,11 @@ void updl_compare_int16_buffers(const char *layer_name, uint16_t layer_idx,
 // SHARED RUNNER FUNCTIONS
 // ============================================================================
 
-updl_test_layer_result_t updl_test_run_layer_isolation(
-    const updl_test_config_t *config,
-    const updl_test_layer_golden_t *layer_golden,
-    const float *input_fp32) {
-    
+updl_test_layer_result_t
+updl_test_run_layer_isolation(const updl_test_config_t *config,
+                              const updl_test_layer_golden_t *layer_golden,
+                              const float *input_fp32) {
+
   updl_test_layer_result_t result = {0};
   result.layer_name = layer_golden->layer_name;
   result.layer_index = layer_golden->layer_index;
@@ -365,7 +368,7 @@ updl_test_layer_result_t updl_test_run_layer_isolation(
 
   // Get layer quantization parameters
   const updl_layer_t *layer = &config->model->layers[layer_golden->layer_index];
-  
+
   // Determine input scale (from model input or previous layer output)
   float input_scale;
   if (layer_golden->layer_index == 0) {
@@ -410,24 +413,17 @@ updl_test_layer_result_t updl_test_run_layer_isolation(
   }
 
   // Step 3: Compare int16 output with golden FP32 (using shared validation)
-  size_t pass_count = 0;
-  size_t fail_count = 0;
+  updl_test_metrics_t metrics = {0};
 
   bool passed = updl_validate_layer_output(
       config->int16_output_buffer, layer_golden->output_golden_fp32,
-      layer_golden->output_size, output_scale, layer_golden->error_threshold,
-      config->verbose, layer_golden->layer_name, &pass_count, &fail_count, NULL);
+      layer_golden->output_size, output_scale, config->verbose,
+      layer_golden->layer_name, &metrics);
 
   result.passed = passed;
-  result.features_passed = pass_count;
-  result.features_failed = fail_count;
-
-  if (config->verbose) {
-    updl_Info("  [%s] Result: %d/%d (%.2f%%) features pass\n",
-              layer_golden->layer_name, (int)pass_count,
-              (int)layer_golden->output_size,
-              (100.0f * pass_count) / layer_golden->output_size);
-  }
+  result.metrics = metrics;
+  result.features_passed = metrics.matched + metrics.diff_1bit;
+  result.features_failed = metrics.diff_2plus_bits;
 
   return result;
 }
@@ -468,37 +464,27 @@ static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
       float output_scale = layer->act_scale;
 
       // Compare with golden reference using shared validation utility
-      size_t pass_count = 0;
-      size_t fail_count = 0;
-
-      updl_validate_layer_output(output, golden->output_golden_fp32,
-                                 golden->output_size, output_scale,
-                                 golden->error_threshold, ctx->verbose,
-                                 golden->layer_name, &pass_count, &fail_count,
-                                 &result->metrics);
+      updl_validate_layer_output(
+          output, golden->output_golden_fp32, golden->output_size, output_scale,
+          ctx->verbose, golden->layer_name, &result->metrics);
 
       // Store pass/fail status and feature counts
-      result->passed = (fail_count == 0);
+      result->passed = (result->metrics.diff_2plus_bits == 0);
       result->total_features = golden->output_size;
-      result->features_passed = pass_count;
-      result->features_failed = fail_count;
-
-      if (ctx->verbose) {
-        updl_Info("  [%s] Result: %d/%d (%.2f%%) features pass\n",
-                  golden->layer_name, (int)pass_count, (int)golden->output_size,
-                  (100.0f * pass_count) / golden->output_size);
-      }
+      result->features_passed =
+          result->metrics.matched + result->metrics.diff_1bit;
+      result->features_failed = result->metrics.diff_2plus_bits;
 
       break; // Found and processed this layer
     }
   }
 }
 
-updl_test_sample_result_t updl_test_run_inference_with_capture(
-    const updl_test_config_t *config,
-    const updl_test_sample_t *sample,
-    uint32_t sample_idx) {
-    
+updl_test_sample_result_t
+updl_test_run_inference_with_capture(const updl_test_config_t *config,
+                                     const updl_test_sample_t *sample,
+                                     uint32_t sample_idx) {
+
   updl_test_sample_result_t sample_result = {0};
   sample_result.sample_index = sample_idx;
   sample_result.num_layers = sample->num_layers;
@@ -511,18 +497,16 @@ updl_test_sample_result_t updl_test_run_inference_with_capture(
     return sample_result;
   }
 
-
-
   // Quantize input from fp32 to int16
   // Use the shared input buffer from config if available, otherwise malloc
   int16_t *input_int16 = config->int16_input_buffer;
   bool free_input = false;
-  
+
   if (!input_int16) {
-      input_int16 = (int16_t *)malloc(sample->input_size * sizeof(int16_t));
-      free_input = true;
+    input_int16 = (int16_t *)malloc(sample->input_size * sizeof(int16_t));
+    free_input = true;
   }
-  
+
   if (!input_int16) {
     updl_Error("%s",
                "ERROR: Memory allocation failed for input quantization\n");
@@ -542,31 +526,31 @@ updl_test_sample_result_t updl_test_run_inference_with_capture(
   // Use shared output buffer if available
   int16_t *output_int16 = config->int16_output_buffer;
   bool free_output = false;
-  
+
   // Get output size from last layer
   size_t output_size = config->model->layers[config->model->num_layers - 1]
                            .output_shape[1]; // Assuming [batch, classes]
-                           
+
   if (!output_int16) {
-      output_int16 = (int16_t *)malloc(output_size * sizeof(int16_t));
-      free_output = true;
+    output_int16 = (int16_t *)malloc(output_size * sizeof(int16_t));
+    free_output = true;
   }
-  
+
   if (!output_int16) {
     updl_Error("%s", "ERROR: Memory allocation failed for output buffer\n");
-    if (free_input) free(input_int16);
+    if (free_input)
+      free(input_int16);
     free(sample_result.layer_results);
     sample_result.layer_results = NULL;
     return sample_result;
   }
 
   // Set up callback context for layer capture
-  layer_capture_context_t capture_ctx = {
-      .sample = sample,
-      .layer_results = sample_result.layer_results,
-      .verbose = config->verbose,
-      .model = config->model
-  };
+  layer_capture_context_t capture_ctx = {.sample = sample,
+                                         .layer_results =
+                                             sample_result.layer_results,
+                                         .verbose = config->verbose,
+                                         .model = config->model};
 
   // Register callback to capture layer outputs during inference
   updl_set_layer_callback(config->executor, layer_capture_callback,
@@ -581,8 +565,10 @@ updl_test_sample_result_t updl_test_run_inference_with_capture(
   if (result != 0) {
     updl_Error("ERROR: updl_execute failed with error %d for sample %u\n",
                result, sample_idx);
-    if (free_input) free(input_int16);
-    if (free_output) free(output_int16);
+    if (free_input)
+      free(input_int16);
+    if (free_output)
+      free(output_int16);
     free(sample_result.layer_results);
     sample_result.layer_results = NULL;
     return sample_result;
@@ -597,8 +583,10 @@ updl_test_sample_result_t updl_test_run_inference_with_capture(
     }
   }
 
-  if (free_input) free(input_int16);
-  if (free_output) free(output_int16);
+  if (free_input)
+    free(input_int16);
+  if (free_output)
+    free(output_int16);
 
   return sample_result;
 }

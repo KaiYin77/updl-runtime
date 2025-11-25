@@ -73,26 +73,15 @@ void updl_dequantize_int16_array(const int16_t *int16_array, float *fp32_array,
 
 /**
  * Test metrics structure for comparing arrays
+ * Reports distribution of error bits across samples
  */
 typedef struct {
-  float mean_error_rate; // Mean of (test_value - golden_value) / golden_value
-  float max_error_rate;  // Maximum absolute error rate
-  size_t num_samples;    // Number of samples compared
+  size_t num_samples;       // Total number of samples compared
+  size_t matched;           // Count of exact matches (0 bits difference)
+  size_t diff_1bit;         // Count of 1-bit differences
+  size_t diff_2plus_bits;   // Count of 2+ bits differences
+  int16_t max_error_bits;   // Maximum absolute error in bits
 } updl_test_metrics_t;
-
-/**
- * Compare two fp32 arrays and calculate error rate
- *
- * Calculates error rate as: (test_value - golden_value) / golden_value
- *
- * @param golden_array  Golden (reference) fp32 array
- * @param test_array    Test (actual) fp32 array
- * @param size          Number of elements
- * @return              Calculated error rate metrics
- */
-updl_test_metrics_t updl_compare_fp32_arrays(const float *golden_array,
-                                             const float *test_array,
-                                             size_t size);
 
 #include <updl/updl_operator.h>
 
@@ -127,23 +116,20 @@ int updl_execute_single_layer(updl_executor_t *executor, uint16_t layer_idx,
  *
  * Compares actual int16 output with golden FP32 values.
  * Simulates int16 quantization on golden values for fair comparison.
+ * Reports distribution: matched, 1-bit diff, 2+ bits diff
  *
  * @param actual         Actual int16 output from layer
  * @param golden_fp32    Expected FP32 output
  * @param size           Number of elements
  * @param scale          Layer output scale
- * @param threshold      Error threshold (e.g., 0.05 = 5%)
  * @param verbose        Print detailed errors
  * @param layer_name     Layer name for logging
- * @param pass_count     Output: number of features that passed
- * @param fail_count     Output: number of features that failed
- * @param metrics        Optional: Output metrics (mean/max error), can be NULL
- * @return true if all features pass threshold
+ * @param metrics        Optional: Output metrics (distribution counts), can be NULL
+ * @return true if all features are exact match or 1-bit difference
  */
 bool updl_validate_layer_output(const int16_t *actual, const float *golden_fp32,
-                                size_t size, float scale, float threshold,
+                                size_t size, float scale,
                                 bool verbose, const char *layer_name,
-                                size_t *pass_count, size_t *fail_count,
                                 updl_test_metrics_t *metrics);
 
 /**
@@ -185,8 +171,6 @@ typedef struct {
   // Output golden reference (FP32)
   const float *output_golden_fp32; // Expected FP32 output
   size_t output_size;              // Output size
-  
-  float error_threshold;    // Acceptable error rate (e.g., 0.05 = 5%)
 } updl_test_layer_golden_t;
 
 /**
