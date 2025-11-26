@@ -147,7 +147,9 @@ uint8_t updl_avg_pool_s16(int16_t *input, int16_t *output,
                 int16_t final_value;
                 if (valid_count > 0) {
                     // Calculate average in accumulator precision
-                    int64_t avg_sum = sum / (int64_t)valid_count;
+                    int64_t avg_sum = (sum >= 0)
+                        ? (sum + valid_count / 2) / valid_count
+                        : (sum - valid_count / 2) / valid_count;
                     
                     // Clamp to 32-bit for requantization (similar to convolution)
                     int32_t raw_avg = updl_clamp_s32(avg_sum);
