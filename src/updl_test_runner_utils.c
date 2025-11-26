@@ -225,10 +225,10 @@ bool updl_validate_layer_output(const int16_t *actual, const float *golden_fp32,
             (golden_val_fp32 != 0.0f) ? (fp32_error / golden_val_fp32) : 0.0f;
 
         updl_Warning(
-            "  [%s] out[%d] = i16(err=%d, compute=0x%04x, golden=0x%04x), "
-            "fp32(err=%.6f, err_ratio=%.4f%%, compute=%.6f, golden=%.6f)\n",
-            layer_name, (int)i, abs_error, actual_val, golden_val_int16,
-            fp32_error, error_rate * 100.0f, actual_fp32, golden_val_fp32);
+            "    out[%d] = i16(err=%d, compute=0x%04x, golden=0x%04x), "
+            "fp32(err=%.4f, err_ratio=%.4f%%, compute=%.4f, golden=%.4f)\n",
+            (int)i, abs_error, actual_val, golden_val_int16, fp32_error,
+            error_rate * 100.0f, actual_fp32, golden_val_fp32);
         logged_errors++;
       }
     }
@@ -255,16 +255,15 @@ bool updl_validate_layer_output(const int16_t *actual, const float *golden_fp32,
     float diff_1_pct = (size > 0) ? (100.0f * diff_1 / size) : 0.0f;
     float diff_2plus_pct = (size > 0) ? (100.0f * diff_2plus / size) : 0.0f;
 
-    updl_Info("  [%s] Report: matched=%d/%d(%.1f%%), abs(1)=%d/%d(%.1f%%), "
+    updl_Info("    Report: matched=%d/%d(%.1f%%), abs(1)=%d/%d(%.1f%%), "
               "abs(2+)=%d/%d(%.1f%%), abs(max_err)=%d(0x%04x, 0x%04x)\n",
-              layer_name, (int)matched, (int)size, matched_pct, (int)diff_1,
-              (int)size, diff_1_pct, (int)diff_2plus, (int)size, diff_2plus_pct,
-              max_error, (uint16_t)max_error_actual,
-              (uint16_t)max_error_golden);
+              (int)matched, (int)size, matched_pct, (int)diff_1, (int)size,
+              diff_1_pct, (int)diff_2plus, (int)size, diff_2plus_pct, max_error,
+              (uint16_t)max_error_actual, (uint16_t)max_error_golden);
   }
 
   if (verbose && logged_errors > 0 && diff_2plus > 10) {
-    updl_Info("  (showing first 10 of %d features with abs(2+) errors)\n",
+    updl_Info("    Note: showing first 10 of %d features with abs(2+) errors\n",
               (int)diff_2plus);
   }
 
@@ -277,10 +276,10 @@ void updl_compare_int16_buffers(const char *layer_name, uint16_t layer_idx,
                                 size_t size, uint32_t *matched,
                                 uint32_t *mismatched) {
   // Debug output for first few elements
-  updl_Info("    - output_1[:5]: 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x\n",
+  updl_Info("      output_1[:5]: 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x\n",
             (uint16_t)buffer1[0], (uint16_t)buffer1[1], (uint16_t)buffer1[2],
             (uint16_t)buffer1[3], (uint16_t)buffer1[4]);
-  updl_Info("    - output_2[:5]: 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x\n",
+  updl_Info("      output_2[:5]: 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x\n",
             (uint16_t)buffer2[0], (uint16_t)buffer2[1], (uint16_t)buffer2[2],
             (uint16_t)buffer2[3], (uint16_t)buffer2[4]);
 
