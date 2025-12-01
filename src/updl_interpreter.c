@@ -9,6 +9,39 @@ void updl_read_bytes(void *target, uint8_t **fp, size_t bytes)
     *fp += bytes;
 }
 
+static void updl_reset_weights(weights_t *weights)
+{
+    weights->dtype = Dtype_int16_t;
+    weights->weight_shape_d = 0;
+    memset(weights->weight_shape, 0, sizeof(weights->weight_shape));
+    weights->weight = NULL;
+}
+
+static void updl_process_bias_block(updl_layer_t *layer, uint8_t **fp, bool expect_bias_tensor)
+{
+    uint16_t bias_flag = 0;
+    updl_load_data(&bias_flag, fp, Dtype_bool, 1, "has_bias", TAG_FIELD, TAG_CHECK);
+    layer->has_bias = (bias_flag != 0);
+
+    if (layer->has_bias)
+    {
+        if (expect_bias_tensor)
+        {
+            updl_load_weights(&layer->bias, fp);
+        }
+        else
+        {
+            updl_Warning("Layer '%s' reports bias data, but loader does not expect it. Skipping bias block.\n",
+                         layer->name);
+            updl_reset_weights(&layer->bias);
+        }
+    }
+    else
+    {
+        updl_reset_weights(&layer->bias);
+    }
+}
+
 void updl_load_data(void *data, uint8_t **fp, dtype_t dtype, uint32_t count, 
                     const char *tag_name, uint8_t tag_field, uint8_t tag_check)
 {
@@ -250,7 +283,7 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
 
         updl_load_weights(&((*layer)->weights), fp);
-        updl_load_weights(&((*layer)->bias), fp);
+        updl_process_bias_block((*layer), fp, true);
 
         break;
 
@@ -278,7 +311,7 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
 
         updl_load_weights(&((*layer)->weights), fp);
-        updl_load_weights(&((*layer)->bias), fp);
+        updl_process_bias_block((*layer), fp, true);
 
         break;
 
@@ -310,7 +343,7 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
 
         updl_load_weights(&((*layer)->weights), fp);
-        updl_load_weights(&((*layer)->bias), fp);
+        updl_process_bias_block((*layer), fp, true);
 
         break;
 
@@ -335,6 +368,8 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         updl_load_data(&((*layer)->bias_scale), fp, Dtype_float32_t, 1, "bias_scale", TAG_FIELD, TAG_CHECK);
         updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
 
+        updl_process_bias_block((*layer), fp, false);
+
         break;
 
     case Ltype_average_pooling_2d:
@@ -358,6 +393,8 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         updl_load_data(&((*layer)->bias_scale), fp, Dtype_float32_t, 1, "bias_scale", TAG_FIELD, TAG_CHECK);
         updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
 
+        updl_process_bias_block((*layer), fp, false);
+
         break;
 
     case Ltype_dense:
@@ -380,7 +417,7 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
 
         updl_load_weights(&((*layer)->weights), fp);
-        updl_load_weights(&((*layer)->bias), fp);
+        updl_process_bias_block((*layer), fp, true);
 
         break;
 
@@ -401,6 +438,8 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         updl_load_data(&((*layer)->bias_scale), fp, Dtype_float32_t, 1, "bias_scale", TAG_FIELD, TAG_CHECK);
         updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
 
+        updl_process_bias_block((*layer), fp, false);
+
         break;
 
     case Ltype_lambda:
@@ -408,6 +447,18 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
                       TAG_CHECK);
         updl_load_data(&((*layer)->output_shape), fp, Dtype_uint16_t, 2, "output_shape", TAG_FIELD,
                       TAG_CHECK);
+
+        updl_load_data(&((*layer)->activation), fp, Dtype_atype_t, 1, "activation", TAG_FIELD,
+                      TAG_CHECK);
+
+        updl_load_data(&((*layer)->act_scale), fp, Dtype_float32_t, 1, "act_scale", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->act_zp), fp, Dtype_int16_t, 1, "act_zp", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->weight_scale), fp, Dtype_float32_t, 1, "weight_scale", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->weight_zp), fp, Dtype_int16_t, 1, "weight_zp", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->bias_scale), fp, Dtype_float32_t, 1, "bias_scale", TAG_FIELD, TAG_CHECK);
+        updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
+
+        updl_process_bias_block((*layer), fp, false);
 
         break;
 
@@ -429,7 +480,7 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
 
         // Add layers can have bias data for the second input tensor
-        updl_load_weights(&((*layer)->bias), fp);
+        updl_process_bias_block((*layer), fp, true);
 
         break;
 
@@ -449,6 +500,8 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         updl_load_data(&((*layer)->weight_zp), fp, Dtype_int16_t, 1, "weight_zp", TAG_FIELD, TAG_CHECK);
         updl_load_data(&((*layer)->bias_scale), fp, Dtype_float32_t, 1, "bias_scale", TAG_FIELD, TAG_CHECK);
         updl_load_data(&((*layer)->bias_zp), fp, Dtype_int16_t, 1, "bias_zp", TAG_FIELD, TAG_CHECK);
+
+        updl_process_bias_block((*layer), fp, false);
 
         break;
 

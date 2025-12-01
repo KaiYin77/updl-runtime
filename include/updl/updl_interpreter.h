@@ -128,6 +128,7 @@ typedef struct updl_layer_t {
   // Weight and bias data
   weights_t weights;
   weights_t bias;
+  bool has_bias;
 
   // Activation quantization parameters (layer outputs)
   float act_scale;              // Activation dequantization scale
@@ -182,6 +183,7 @@ void *updl_alloc(updl_context_t *ctx, size_t size);
 updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data);
 
 // Layer data parsing functions  
+uint8_t updl_load_weights(weights_t *pWeights, uint8_t **fp);
 uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp);
 void updl_load_data(void *data, uint8_t **fp, dtype_t dtype, uint32_t count, 
                     const char *tag_name, uint8_t tag_field, uint8_t tag_check);
