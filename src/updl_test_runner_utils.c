@@ -202,7 +202,7 @@ bool updl_validate_layer_output(const int16_t *actual, const float *golden_fp32,
     float golden_val_fp32 = golden_fp32[i];
 
     // Quantize golden fp32 to int16 for comparison (simulate int16 domain)
-    int16_t golden_val_int16 = (int16_t)((golden_val_fp32 / scale) + 0.5f);
+    int16_t golden_val_int16 = updl_quantize_fp32_to_int16(golden_val_fp32, scale, 0);
 
     // Calculate absolute error in int16 domain
     int16_t abs_error = (int16_t)(actual_val - golden_val_int16);
