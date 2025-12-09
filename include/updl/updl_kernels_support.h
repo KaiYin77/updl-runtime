@@ -423,8 +423,9 @@ static inline requant_params_t updl_bias_scale_to_multiplier_shift(float scale) 
     int16_t calculated_shift = (error_floor < error_ceil) ? shift_floor : shift_ceil;
     
     // Clamp shift to UDL hardware limits for bias operations
-    const int16_t UDL_MIN_BIAS_SHIFT = -15;
-    const int16_t UDL_MAX_BIAS_SHIFT = 15;
+    // Hardware supports bias_lshift 0-31, which maps to eff_bias_shift -31 to 0
+    const int16_t UDL_MIN_BIAS_SHIFT = -31;  // Max left shift (bias_lshift = 31)
+    const int16_t UDL_MAX_BIAS_SHIFT = 0;    // No right shift supported (bias_lshift = 0)
     
     if (calculated_shift < UDL_MIN_BIAS_SHIFT) {
         params.shift = UDL_MIN_BIAS_SHIFT;

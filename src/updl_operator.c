@@ -117,9 +117,34 @@ updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
 #endif
 
     // Compute effective bias scale: bias_scale / (input_scale * weight_scale)
-    float eff_bias_scale = bias_scale / (input_scale * weight_scale);
+    float expected_bias_scale = input_scale * weight_scale;
+    float eff_bias_scale = bias_scale / expected_bias_scale;
+
     requant_params_t eff_bias =
         updl_bias_scale_to_multiplier_shift(eff_bias_scale);
+
+    // Calculate reconstructed scale from multiplier/shift
+    float reconstructed_scale;
+    if (eff_bias.shift >= 0) {
+      reconstructed_scale = (float)eff_bias.multiplier / (1 << eff_bias.shift);
+    } else {
+      reconstructed_scale =
+          (float)eff_bias.multiplier * (1 << (-eff_bias.shift));
+    }
+
+    float approximation_error = eff_bias_scale - reconstructed_scale;
+    float relative_error = fabsf(approximation_error / eff_bias_scale);
+
+    if (relative_error > 0.01) { // >1% error
+      // INVESTIGATION: Check if power-of-2 approximation is causing bias error
+      updl_Warning("Layer %d: Power-of-2 approximation analysis:\n", i);
+      updl_Warning("  Original eff_bias_scale: %.8f\n", eff_bias_scale);
+      updl_Warning("  Multiplier: %d, Shift: %d\n", eff_bias.multiplier,
+                   eff_bias.shift);
+      updl_Warning("  Reconstructed scale: %.8f\n", reconstructed_scale);
+      updl_Warning("  Relative error: %.6f%%\n", relative_error * 100.0f);
+    }
+
     layer->effective_bias_multiplier = eff_bias.multiplier;
     layer->effective_bias_shift = eff_bias.shift;
 
@@ -133,7 +158,8 @@ updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
 #endif
 
     // Store quantization parameters for kernel use
-    layer->input_scale = input_scale;  // Store input scale for layers that need it (e.g., softmax)
+    layer->input_scale = input_scale; // Store input scale for layers that need
+                                      // it (e.g., softmax)
     layer->input_zp = input_zp;
     layer->output_zp = output_zp;
     layer->weight_zp = weight_zp;
