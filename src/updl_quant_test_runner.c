@@ -40,7 +40,14 @@ void updl_init_quant_test_data(const updl_layer_quant_config_t *layer_configs,
       layer_golden->layer_name = config->layer_name;
       layer_golden->layer_index = config->layer_index;
 
-      // Set input golden reference
+      // Determine number of inputs (default 1)
+      uint16_t num_inputs = config->num_inputs;
+      if (num_inputs == 0) {
+        num_inputs = 1;
+      }
+      layer_golden->num_inputs = num_inputs > 2 ? 2 : num_inputs;
+
+      // Set input golden reference (primary)
       if (config->input_golden_data == NULL) {
         // No input golden data configured (will use model input from sample)
         layer_golden->input_golden_fp32 = NULL;
@@ -51,6 +58,18 @@ void updl_init_quant_test_data(const updl_layer_quant_config_t *layer_configs,
             (sample_idx * config->input_size);
       }
       layer_golden->input_size = config->input_size;
+
+      // Optional second input
+      if (layer_golden->num_inputs > 1 &&
+          config->second_input_golden_data != NULL) {
+        layer_golden->second_input_golden_fp32 =
+            (const float *)config->second_input_golden_data +
+            (sample_idx * config->second_input_size);
+        layer_golden->second_input_size = config->second_input_size;
+      } else {
+        layer_golden->second_input_golden_fp32 = NULL;
+        layer_golden->second_input_size = 0;
+      }
 
       // Set output golden reference
       layer_golden->output_golden_fp32 =
@@ -141,6 +160,9 @@ updl_run_quantization_tests(const updl_quant_test_config_t *config) {
             .layer_index = layer_golden->layer_index,
             .input_golden_fp32 = layer_golden->input_golden_fp32,
             .input_size = layer_golden->input_size,
+            .second_input_golden_fp32 = layer_golden->second_input_golden_fp32,
+            .second_input_size = layer_golden->second_input_size,
+            .num_inputs = layer_golden->num_inputs,
             .output_golden_fp32 = layer_golden->output_golden_fp32,
             .output_size = layer_golden->output_size
         };

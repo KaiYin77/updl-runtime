@@ -22,6 +22,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -326,28 +327,49 @@ uint8_t updl_add(updl_executor_t *executor, const updl_layer_t *layer, updl_exec
     int16_t *output = (int16_t *)exec_layer->output_ptr;
     uint32_t total_size = exec_layer->output_size;
 
-    // Standard NN runtime: Add supports multiple inputs natively
+    // Standard NN runtime: Add supports multiple inputs natively. Pre-clear all inputs so
+    // partially-filled input_layers metadata does not leak old buffer pointers.
     int16_t *input_buffers[4] = {NULL}; // Max 4 inputs for practical cases
-    int16_t input_zps[4];
-    float input_scales[4];
+    int16_t input_zps[4] = {0};
+    float input_scales[4] = {0.0f};
 
     // Set up input buffers and quantization parameters
+    uint16_t connected_inputs = 0;
     for (uint16_t inp = 0; inp < layer->num_inputs && inp < 4; inp++) {
         uint16_t input_layer_idx = layer->input_layer_indices[inp];
+        if (input_layer_idx >= executor->model->num_layers) {
+            continue;
+        }
         const updl_layer_t *input_layer = &executor->model->layers[input_layer_idx];
+        int16_t *buffer_ptr = executor->activation_buffers[input_layer->buffer_id];
+        if (!buffer_ptr) {
+            continue;
+        }
 
-        input_buffers[inp] = executor->activation_buffers[input_layer->buffer_id];
+        input_buffers[inp] = buffer_ptr;
         input_zps[inp] = input_layer->act_zp;
         input_scales[inp] = input_layer->act_scale;
+        connected_inputs++;
     }
 
+#if UPDL_ENABLE_DEBUG
+    updl_Debug("Add layer %d: configured %u/%u inputs\n",
+               layer->serial, connected_inputs, layer->num_inputs);
+    for (uint16_t inp = 0; inp < layer->num_inputs && inp < 4; inp++) {
+        updl_Debug("  input[%u]: idx=%u ptr=%p\n",
+                   inp, layer->input_layer_indices[inp], (void *)input_buffers[inp]);
+    }
+#endif
+
     // Use modular kernel with proper requantization
-    return updl_add_s16(
+    uint8_t result = updl_add_s16(
         input_buffers, layer->num_inputs, output, total_size,
         layer->activation,
         layer->effective_multiplier, layer->effective_shift,
         input_zps, layer->act_zp,
         input_scales, layer->act_scale);
+
+    return result;
 }
 
 /**

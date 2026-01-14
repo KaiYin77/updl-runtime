@@ -367,15 +367,30 @@ updl_test_run_layer_isolation(const updl_test_config_t *config,
 
   // Get layer quantization parameters
   const updl_layer_t *layer = &config->model->layers[layer_golden->layer_index];
+  uint16_t configured_inputs =
+      (layer_golden->num_inputs > 0) ? layer_golden->num_inputs : 1;
 
-  // Determine input scale (from model input or previous layer output)
+  // Determine input scale/zp (from model input or upstream layer output)
   float input_scale;
-  if (layer_golden->layer_index == 0) {
+  int16_t input_zp = 0;
+  if (configured_inputs > 1 && layer->num_inputs >= configured_inputs) {
+    uint16_t source_idx = layer->input_layer_indices[0];
+    if (source_idx < config->model->num_layers) {
+      const updl_layer_t *src_layer = &config->model->layers[source_idx];
+      input_scale = src_layer->act_scale;
+      input_zp = src_layer->act_zp;
+    } else {
+      input_scale = config->model->input_scale;
+      input_zp = 0;
+    }
+  } else if (layer_golden->layer_index == 0) {
     input_scale = config->model->input_scale;
+    input_zp = 0;
   } else {
     const updl_layer_t *prev_layer =
         &config->model->layers[layer_golden->layer_index - 1];
     input_scale = prev_layer->act_scale;
+    input_zp = prev_layer->act_zp;
   }
 
   float output_scale = layer->act_scale;
@@ -390,7 +405,34 @@ updl_test_run_layer_isolation(const updl_test_config_t *config,
   }
 
   updl_quantize_fp32_array(input_fp32, config->int16_input_buffer,
-                           layer_golden->input_size, input_scale, 0);
+                           layer_golden->input_size, input_scale, input_zp);
+
+  // For multi-input layers, populate upstream buffers directly
+  if (configured_inputs > 1 && layer->num_inputs >= configured_inputs) {
+    for (uint16_t inp = 0; inp < configured_inputs && inp < layer->num_inputs;
+         inp++) {
+      uint16_t src_idx = layer->input_layer_indices[inp];
+      if (src_idx >= config->model->num_layers) {
+        continue;
+      }
+      const updl_layer_t *src_layer = &config->model->layers[src_idx];
+      int16_t *dst_buffer =
+          config->executor->activation_buffers[src_layer->buffer_id];
+      if (!dst_buffer) {
+        continue;
+      }
+
+      if (inp == 0) {
+        size_t copy_bytes = layer_golden->input_size * sizeof(int16_t);
+        memcpy(dst_buffer, config->int16_input_buffer, copy_bytes);
+      } else if (layer_golden->second_input_golden_fp32 &&
+                 layer_golden->second_input_size > 0) {
+        updl_quantize_fp32_array(layer_golden->second_input_golden_fp32,
+                                 dst_buffer, layer_golden->second_input_size,
+                                 src_layer->act_scale, src_layer->act_zp);
+      }
+    }
+  }
 
   // Step 2: Execute ONLY this layer
   if (layer_golden->output_size > config->int16_output_buffer_size) {

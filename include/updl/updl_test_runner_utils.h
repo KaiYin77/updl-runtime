@@ -167,6 +167,9 @@ typedef struct {
   // Input golden reference (FP32) - Optional, used for isolation tests
   const float *input_golden_fp32; 
   size_t input_size;
+  const float *second_input_golden_fp32;
+  size_t second_input_size;
+  uint16_t num_inputs;
 
   // Output golden reference (FP32)
   const float *output_golden_fp32; // Expected FP32 output
@@ -281,4 +284,3 @@ updl_test_sample_result_t updl_test_run_inference_with_capture(
 void updl_test_free_report(updl_test_report_t *report);
 
 #endif // UPDL_TEST_RUNNER_UTILS_H
-

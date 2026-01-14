@@ -33,8 +33,16 @@
 typedef struct {
   const char *layer_name;         // Layer name (e.g., "activation", "flatten")
   uint16_t layer_index;           // Layer index in model
+
+  // Primary input (required)
   const void *input_golden_data;  // Pointer to 2D array [num_samples][input_size]
   size_t input_size;              // Input size per sample
+
+  // Optional secondary input (for Add/concat layers)
+  const void *second_input_golden_data; // Pointer to [num_samples][second_input_size]
+  size_t second_input_size;             // Size per sample for second input
+  uint16_t num_inputs;                  // Total number of inputs (1 or 2)
+
   const void *output_golden_data; // Pointer to 2D array [num_samples][output_size]
   size_t output_size;             // Output size per sample
 } updl_layer_quant_config_t;
