@@ -511,5 +511,23 @@ uint8_t updl_load_layer_params(updl_layer_t **layer, uint8_t **fp)
         break;
     }
 
+    // Load graph execution metadata (common to all layer types)
+    updl_load_data(&((*layer)->buffer_id), fp, Dtype_uint16_t, 1, "buffer_id", TAG_FIELD, TAG_CHECK);
+    updl_load_data(&((*layer)->num_inputs), fp, Dtype_uint16_t, 1, "num_inputs", TAG_FIELD, TAG_CHECK);
+
+    // Initialize input layer indices to default values
+    for (int i = 0; i < 4; i++) {
+        (*layer)->input_layer_indices[i] = 0;
+    }
+
+    // Load input layer indices for multi-input layers
+    if ((*layer)->num_inputs > 1) {
+        updl_load_data(&((*layer)->input_layer_indices), fp, Dtype_uint16_t,
+                      (*layer)->num_inputs, "input_layers", TAG_FIELD, TAG_CHECK);
+    } else {
+        // For single-input layers, input comes from previous layer
+        (*layer)->input_layer_indices[0] = (*layer)->serial - 1;
+    }
+
     return 0;
 }

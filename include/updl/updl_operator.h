@@ -63,6 +63,10 @@ struct updl_executor_t {
   rstate_t state;                  // Current execution state
   uint16_t current_layer;          // Current layer being processed
 
+  // Static buffer allocation for graph execution
+  int16_t **activation_buffers;    // Array of pre-allocated activation buffers
+  bool *layer_completed;           // Completion tracking for graph execution
+
   // Debug/testing callback (optional)
   updl_layer_callback_t layer_callback; // Called after each layer completes
   void *callback_user_data;             // User data passed to callback

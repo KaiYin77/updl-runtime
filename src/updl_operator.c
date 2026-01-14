@@ -49,6 +49,24 @@ updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
   updl_load_data(&model->input_scale, &fp, Dtype_float32_t, 1, "input_scale",
                  TAG_FIELD, TAG_CHECK);
 
+  // Load buffer allocation metadata
+  updl_load_data(&model->buffer_count, &fp, Dtype_uint16_t, 1, "buffer_count",
+                 TAG_FIELD, TAG_CHECK);
+  updl_load_data(&model->total_memory_bytes, &fp, Dtype_uint32_t, 1, "total_memory",
+                 TAG_FIELD, TAG_CHECK);
+
+  // Allocate and load buffer sizes
+  model->buffer_sizes = (uint32_t *)updl_alloc(ctx, sizeof(uint32_t) * model->buffer_count);
+  if (!model->buffer_sizes) {
+    updl_Error("%s", "Failed to allocate buffer sizes array!\n");
+    return NULL;
+  }
+
+  for (size_t i = 0; i < model->buffer_count; i++) {
+    updl_load_data(&model->buffer_sizes[i], &fp, Dtype_uint32_t, 1, "buffer_size",
+                   TAG_FIELD, TAG_CHECK);
+  }
+
   // Allocate layer storage (simplified - single allocation)
   model->layers =
       (updl_layer_t *)updl_alloc(ctx, sizeof(updl_layer_t) * model->num_layers);
@@ -183,20 +201,28 @@ updl_executor_t *updl_create_executor(const updl_model_t *model,
     return NULL;
   }
 
+  updl_context_t *ctx = model->context;
+  if (!ctx) {
+    updl_Error("%s", "Model context is NULL\n");
+    return NULL;
+  }
+
   // Allocate executor from context
   updl_Debug(
       "Creating executor: memory_pool=%p, memory_pool->max_buffer_size=%d\n",
       (void *)memory_pool, memory_pool->max_buffer_size);
 
-  // Use static allocation to avoid memory overlap with memory pool
-  static updl_executor_t static_executor;
-  updl_executor_t *executor = &static_executor;
-  // Clear the static executor structure
-  for (int32_t i = 0; i < (int)sizeof(updl_executor_t); i++) {
-    ((uint8_t *)executor)[i] = 0;
+  // Allocate executor from context (no more static limitation)
+  updl_executor_t *executor = (updl_executor_t *)updl_alloc(ctx, sizeof(updl_executor_t));
+  if (!executor) {
+    updl_Error("%s", "Failed to allocate executor!\n");
+    return NULL;
   }
 
-  updl_Debug("Executor allocated at %p (static)\n", (void *)executor);
+  // Clear the executor structure
+  memset(executor, 0, sizeof(updl_executor_t));
+
+  updl_Debug("Executor allocated at %p\n", (void *)executor);
 
   executor->model = model;
   executor->memory_pool = memory_pool;
@@ -207,19 +233,47 @@ updl_executor_t *updl_create_executor(const updl_model_t *model,
              (void *)executor->memory_pool,
              executor->memory_pool->max_buffer_size);
 
-  // Allocate execution layer contexts using static allocation to avoid overlap
-  static updl_exec_layer_t static_exec_layers[24]; // Max 16 layers
-  if (model->num_layers > 24) {
-    updl_Error("Too many layers (%d), maximum supported is 24\n",
-               model->num_layers);
+  // Allocate activation buffers array from memory pool
+  executor->activation_buffers = (int16_t **)updl_alloc(ctx, sizeof(int16_t *) * model->buffer_count);
+  if (!executor->activation_buffers) {
+    updl_Error("%s", "Failed to allocate activation buffers array!\n");
     return NULL;
   }
 
-  executor->exec_layers = static_exec_layers;
-  // Clear the static exec layers structure
-  for (int32_t i = 0; i < (int32_t)sizeof(static_exec_layers); i++) {
-    ((uint8_t *)static_exec_layers)[i] = 0;
+  // Allocate completion tracking array
+  executor->layer_completed = (bool *)updl_alloc(ctx, sizeof(bool) * model->num_layers);
+  if (!executor->layer_completed) {
+    updl_Error("%s", "Failed to allocate layer completion array!\n");
+    return NULL;
   }
+
+  // Initialize completion tracking
+  for (size_t i = 0; i < model->num_layers; i++) {
+    executor->layer_completed[i] = false;
+  }
+
+  // Allocate each activation buffer based on static analysis
+  for (size_t i = 0; i < model->buffer_count; i++) {
+    size_t buffer_size_bytes = model->buffer_sizes[i];
+
+    executor->activation_buffers[i] = (int16_t *)updl_alloc(ctx, buffer_size_bytes);
+    if (!executor->activation_buffers[i]) {
+      updl_Error("Failed to allocate activation buffer %d (%d bytes)\n", i, buffer_size_bytes);
+      return NULL;
+    }
+
+    updl_Debug("Allocated buffer %d: %d bytes\n", i, buffer_size_bytes);
+  }
+
+  // Allocate execution layer contexts
+  executor->exec_layers = (updl_exec_layer_t *)updl_alloc(ctx, sizeof(updl_exec_layer_t) * model->num_layers);
+  if (!executor->exec_layers) {
+    updl_Error("%s", "Failed to allocate execution layer contexts!\n");
+    return NULL;
+  }
+
+  // Clear the execution layer contexts
+  memset(executor->exec_layers, 0, sizeof(updl_exec_layer_t) * model->num_layers);
 
   for (size_t i = 0; i < model->num_layers; i++) {
     const updl_layer_t *layer = &model->layers[i];
@@ -328,19 +382,13 @@ int32_t updl_execute(updl_executor_t *executor, const void *input,
   // Reset memory pool for fresh inference
   updl_reset_memory_pool(pool);
 
-  // Initialize stream processing with input data
+  // Initialize input data for graph execution
   if (model->num_layers > 0) {
     updl_exec_layer_t *first_exec_layer = &executor->exec_layers[0];
     size_t input_bytes = first_exec_layer->input_size * sizeof(int16_t);
-    size_t output_bytes = first_exec_layer->output_size * sizeof(int16_t);
-    // Ensure stream buffers can handle first layer
-    if (updl_ensure_buffer_capacity(pool, input_bytes, output_bytes) != 0) {
-      executor->state = rstate_invalid;
-      return -1;
-    }
 
-    // Copy input data to current input buffer
-    memcpy(updl_get_input_buffer(pool), input, input_bytes);
+    // Copy input data to buffer 0 (reserved for input)
+    memcpy(executor->activation_buffers[0], input, input_bytes);
 
     // Print first few input values for debugging
 #if UPDL_ENABLE_DEBUG
@@ -355,32 +403,60 @@ int32_t updl_execute(updl_executor_t *executor, const void *input,
 
   executor->state = rstate_running_soft;
 
-  // Execute each layer with stream processing
-  for (size_t i = 0; i < model->num_layers; i++) {
+  // Execute layers using dependency-based graph execution
+  size_t completed_layers = 0;
+  while (completed_layers < model->num_layers) {
+    bool made_progress = false;
 
-    const updl_layer_t *layer = &model->layers[i];
-    updl_exec_layer_t *exec_layer = &executor->exec_layers[i];
-
-    updl_Debug("Layer %d details: type=%d, input_size=%d, output_size=%d\n", i,
-               layer->type, exec_layer->input_size, exec_layer->output_size);
-
-    executor->current_layer = i;
-
-    // Set up stream buffers for current layer
-    size_t input_bytes = exec_layer->input_size * sizeof(int16_t);
-    size_t output_bytes = exec_layer->output_size * sizeof(int16_t);
-
-    // Ensure capacity for current layer (usually no-op after first layer)
-    if (i > 0) {
-      if (updl_ensure_buffer_capacity(pool, input_bytes, output_bytes) != 0) {
-        executor->state = rstate_invalid;
-        return -1;
+    for (size_t i = 0; i < model->num_layers; i++) {
+      if (executor->layer_completed[i]) {
+        continue; // Layer already completed
       }
-    }
 
-    // Set current stream buffer pointers for this layer
-    exec_layer->input_ptr = (uint16_t *)updl_get_input_buffer(pool);
-    exec_layer->output_ptr = (uint16_t *)updl_get_output_buffer(pool);
+      const updl_layer_t *layer = &model->layers[i];
+      updl_exec_layer_t *exec_layer = &executor->exec_layers[i];
+
+      // Check if all dependencies are satisfied
+      bool can_execute = true;
+      for (uint16_t dep = 0; dep < layer->num_inputs; dep++) {
+        uint16_t input_layer_idx = layer->input_layer_indices[dep];
+        if (input_layer_idx != i && input_layer_idx < model->num_layers) {
+          if (!executor->layer_completed[input_layer_idx]) {
+            can_execute = false;
+            break;
+          }
+        }
+      }
+
+      if (!can_execute) {
+        continue; // Dependencies not ready
+      }
+
+      updl_Debug("Layer %d details: type=%d, input_size=%d, output_size=%d\n", i,
+                 layer->type, exec_layer->input_size, exec_layer->output_size);
+
+      executor->current_layer = i;
+
+      // Set up static buffer pointers for current layer
+      exec_layer->output_ptr = (uint16_t *)executor->activation_buffers[layer->buffer_id];
+
+      // For multi-input layers (Add), handle multiple inputs
+      if (layer->num_inputs > 1) {
+        // For Add layers, input_ptr points to first input buffer
+        uint16_t first_input_layer = layer->input_layer_indices[0];
+        exec_layer->input_ptr = (uint16_t *)executor->activation_buffers[
+            model->layers[first_input_layer].buffer_id];
+      } else {
+        // Single input layer
+        if (i == 0) {
+          // First layer uses input data (already copied to buffer 0)
+          exec_layer->input_ptr = (uint16_t *)executor->activation_buffers[0];
+        } else {
+          uint16_t input_layer_idx = layer->input_layer_indices[0];
+          exec_layer->input_ptr = (uint16_t *)executor->activation_buffers[
+              model->layers[input_layer_idx].buffer_id];
+        }
+      }
 
     // Execute layer based on type
 #if UPDL_ENABLE_DEBUG
@@ -422,7 +498,19 @@ int32_t updl_execute(updl_executor_t *executor, const void *input,
       result = updl_l2_norm(layer, exec_layer);
       break;
     case Ltype_add:
-      result = updl_add(layer, exec_layer);
+      // For Add layers with multiple inputs, pass additional input buffers
+      if (layer->num_inputs > 1) {
+        // Set up pointers to all input buffers for the Add operation
+        int16_t *input_buffers[4] = {NULL}; // Max 4 inputs
+        for (uint16_t inp = 0; inp < layer->num_inputs; inp++) {
+          uint16_t input_layer_idx = layer->input_layer_indices[inp];
+          input_buffers[inp] = executor->activation_buffers[
+              model->layers[input_layer_idx].buffer_id];
+        }
+        result = updl_add_multi_input(layer, exec_layer, input_buffers, layer->num_inputs);
+      } else {
+        result = updl_add(layer, exec_layer);
+      }
       break;
     case Ltype_softmax:
       result = updl_softmax(executor, layer, exec_layer);
@@ -465,33 +553,44 @@ int32_t updl_execute(updl_executor_t *executor, const void *input,
     }
 #endif
 
-    if (result != 0) {
-      updl_Error("Layer %d execution failed with error %d\n", i, result);
+      if (result != 0) {
+        updl_Error("Layer %d execution failed with error %d\n", i, result);
+        executor->state = rstate_invalid;
+        return result;
+      }
+
+      // Call layer callback if registered
+      if (executor->layer_callback) {
+        executor->layer_callback(i, (const int16_t *)exec_layer->output_ptr,
+                                 exec_layer->output_size,
+                                 executor->callback_user_data);
+      }
+
+      // Mark layer as completed
+      executor->layer_completed[i] = true;
+      completed_layers++;
+      made_progress = true;
+
+      updl_Debug("Layer %d completed (%d/%d total)\n", i, completed_layers, model->num_layers);
+    }
+
+    // Check for deadlock (no progress made in this iteration)
+    if (!made_progress) {
+      updl_Error("Graph execution deadlock detected at layer iteration\n");
       executor->state = rstate_invalid;
-      return result;
-    }
-
-    // Call layer callback if registered (BEFORE buffer swap)
-    // This allows capturing layer outputs before they're overwritten
-    if (executor->layer_callback) {
-      executor->layer_callback(i, (const int16_t *)exec_layer->output_ptr,
-                               exec_layer->output_size,
-                               executor->callback_user_data);
-    }
-
-    // Swap buffers for next layer (output becomes input)
-    if (i < (size_t)model->num_layers - 1) {
-      updl_Debug("Swapping buffers for next layer (current layer: %d)\n", i);
-      updl_swap_stream_buffers(pool);
+      return -1;
     }
   }
 
-  // Copy output data from current output buffer
+  // Copy output data from final layer's buffer
   if (model->num_layers > 0) {
-    updl_exec_layer_t *last_exec_layer =
-        &executor->exec_layers[model->num_layers - 1];
+    updl_exec_layer_t *last_exec_layer = &executor->exec_layers[model->num_layers - 1];
+    const updl_layer_t *last_layer = &model->layers[model->num_layers - 1];
     size_t output_bytes = last_exec_layer->output_size * sizeof(int16_t);
-    memcpy(output, updl_get_output_buffer(pool), output_bytes);
+
+    // Copy from the last layer's assigned buffer
+    int16_t *last_buffer = executor->activation_buffers[last_layer->buffer_id];
+    memcpy(output, last_buffer, output_bytes);
   }
 
   executor->state = rstate_idle;

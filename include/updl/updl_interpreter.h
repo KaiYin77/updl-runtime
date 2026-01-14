@@ -153,6 +153,11 @@ typedef struct updl_layer_t {
   int32_t effective_bias_multiplier; // Combined multiplier for bias scaling: (input_scale * weight_scale) / bias_scale
   int16_t effective_bias_shift;      // Combined shift for bias scaling
 
+  // Graph execution support
+  uint16_t buffer_id;           // Statically assigned buffer ID for this layer's output
+  uint16_t num_inputs;          // Number of input dependencies (1 for sequential, 2+ for add/concat)
+  uint16_t input_layer_indices[4]; // Indices of layers that provide inputs (max 4 for practical cases)
+
 } updl_layer_t;
 
 // Streamlined model structure (static data only)
@@ -163,6 +168,11 @@ typedef struct updl_model_t {
   uint16_t batch_input_shape[4]; // Input shape
   dtype_t dtype;                 // Data type
   float input_scale;             // Global input quantization scale
+
+  // Static buffer allocation metadata
+  uint16_t buffer_count;         // Number of activation buffers needed
+  uint32_t total_memory_bytes;   // Total memory required for all buffers
+  uint32_t *buffer_sizes;        // Array of buffer sizes (in bytes)
 
   updl_layer_t *layers;          // Array of layers (not pointers)
   updl_context_t *context;       // Memory context
