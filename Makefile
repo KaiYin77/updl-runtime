@@ -10,6 +10,7 @@ OBJDIR = obj
 # Source files
 SOURCES = $(wildcard $(SRCDIR)/*.c) \
           $(wildcard $(SRCDIR)/ActivationFunctions/*.c) \
+          $(wildcard $(SRCDIR)/AddFunctions/*.c) \
           $(wildcard $(SRCDIR)/ConvolutionFunctions/*.c) \
           $(wildcard $(SRCDIR)/FullyConnectedFunctions/*.c) \
           $(wildcard $(SRCDIR)/NNSupportFunctions/*.c) \
@@ -29,6 +30,7 @@ all: $(LIBNAME) $(SONAME)
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 	mkdir -p $(OBJDIR)/ActivationFunctions
+	mkdir -p $(OBJDIR)/AddFunctions
 	mkdir -p $(OBJDIR)/ConvolutionFunctions
 	mkdir -p $(OBJDIR)/FullyConnectedFunctions
 	mkdir -p $(OBJDIR)/NNSupportFunctions

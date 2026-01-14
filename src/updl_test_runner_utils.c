@@ -156,7 +156,7 @@ int updl_execute_single_layer(updl_executor_t *executor, uint16_t layer_idx,
     result = updl_l2_norm(layer, exec_layer);
     break;
   case Ltype_add:
-    result = updl_add(layer, exec_layer);
+    result = updl_add(executor, layer, exec_layer);
     break;
   case Ltype_softmax:
     result = updl_softmax(executor, layer, exec_layer);

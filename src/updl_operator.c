@@ -498,19 +498,7 @@ int32_t updl_execute(updl_executor_t *executor, const void *input,
       result = updl_l2_norm(layer, exec_layer);
       break;
     case Ltype_add:
-      // For Add layers with multiple inputs, pass additional input buffers
-      if (layer->num_inputs > 1) {
-        // Set up pointers to all input buffers for the Add operation
-        int16_t *input_buffers[4] = {NULL}; // Max 4 inputs
-        for (uint16_t inp = 0; inp < layer->num_inputs; inp++) {
-          uint16_t input_layer_idx = layer->input_layer_indices[inp];
-          input_buffers[inp] = executor->activation_buffers[
-              model->layers[input_layer_idx].buffer_id];
-        }
-        result = updl_add_multi_input(layer, exec_layer, input_buffers, layer->num_inputs);
-      } else {
-        result = updl_add(layer, exec_layer);
-      }
+      result = updl_add(executor, layer, exec_layer);
       break;
     case Ltype_softmax:
       result = updl_softmax(executor, layer, exec_layer);

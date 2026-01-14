@@ -319,37 +319,35 @@ uint8_t updl_l2_norm(const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
  * @brief Add layer implementation
  * Element-wise addition with broadcast support for bias-like operations
  */
-uint8_t updl_add(const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
+uint8_t updl_add(updl_executor_t *executor, const updl_layer_t *layer, updl_exec_layer_t *exec_layer) {
     if (layer->type != Ltype_add)
         return 1;
 
-    int16_t *input = (int16_t *)exec_layer->input_ptr;
     int16_t *output = (int16_t *)exec_layer->output_ptr;
-    int16_t *bias = layer->bias.weight;
+    uint32_t total_size = exec_layer->output_size;
 
-    uint32_t total_size = exec_layer->input_size;
+    // Standard NN runtime: Add supports multiple inputs natively
+    int16_t *input_buffers[4] = {NULL}; // Max 4 inputs for practical cases
+    int16_t input_zps[4];
+    float input_scales[4];
 
-    // Simple element-wise addition with bias
-    // For Add operations, the "bias" contains the second input tensor
-    if (bias != NULL) {
-        // Element-wise addition with broadcast
-        for (uint32_t i = 0; i < total_size; i++) {
-            // Bias broadcast: if bias has fewer elements, repeat pattern
-            uint32_t bias_idx = (exec_layer->bias_size > 0) ? (i % exec_layer->bias_size) : 0;
-            int32_t result = (int32_t)input[i] + (int32_t)bias[bias_idx];
+    // Set up input buffers and quantization parameters
+    for (uint16_t inp = 0; inp < layer->num_inputs && inp < 4; inp++) {
+        uint16_t input_layer_idx = layer->input_layer_indices[inp];
+        const updl_layer_t *input_layer = &executor->model->layers[input_layer_idx];
 
-            // Simple clamping to int16 range
-            if (result > 32767) result = 32767;
-            if (result < -32768) result = -32768;
-
-            output[i] = (int16_t)result;
-        }
-    } else {
-        // No second input - just copy input to output
-        memcpy(output, input, total_size * sizeof(int16_t));
+        input_buffers[inp] = executor->activation_buffers[input_layer->buffer_id];
+        input_zps[inp] = input_layer->act_zp;
+        input_scales[inp] = input_layer->act_scale;
     }
 
-    return 0;
+    // Use modular kernel with proper requantization
+    return updl_add_s16(
+        input_buffers, layer->num_inputs, output, total_size,
+        layer->activation,
+        layer->effective_multiplier, layer->effective_shift,
+        input_zps, layer->act_zp,
+        input_scales, layer->act_scale);
 }
 
 /**

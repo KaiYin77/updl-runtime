@@ -111,11 +111,40 @@ uint8_t updl_l2_norm(const updl_layer_t *layer, updl_exec_layer_t *exec_layer);
 
 /**
  * @brief Execute Add layer
+ * @param[in] executor   Model executor context
  * @param[in] layer      Layer configuration
  * @param[in] exec_layer Layer execution context
  * @return Status code (0 = success)
  */
-uint8_t updl_add(const updl_layer_t *layer, updl_exec_layer_t *exec_layer);
+uint8_t updl_add(updl_executor_t *executor, const updl_layer_t *layer, updl_exec_layer_t *exec_layer);
+
+// ============================================================================
+// ADD FUNCTIONS (AddFunctions module)
+// ============================================================================
+
+/**
+ * @brief Basic s16 element-wise addition with requantization
+ * @param[in]  input_buffers Array of input buffer pointers
+ * @param[in]  num_inputs    Number of input tensors
+ * @param[out] output        Output tensor
+ * @param[in]  tensor_size   Number of elements per tensor
+ * @param[in]  activation    Activation function type
+ * @param[in]  eff_multiplier Effective requantization multiplier
+ * @param[in]  eff_shift     Effective requantization shift
+ * @param[in]  input_zps     Array of input zero points
+ * @param[in]  output_zp     Output zero point
+ * @param[in]  input_scales  Array of input scales
+ * @param[in]  output_scale  Output scale
+ * @return Status code (0 = success)
+ */
+uint8_t updl_add_s16(
+    int16_t **input_buffers, uint32_t num_inputs, int16_t *output,
+    uint32_t tensor_size,
+    atype_t activation,
+    int32_t eff_multiplier, int16_t eff_shift,
+    int16_t *input_zps, int16_t output_zp,
+    float *input_scales, float output_scale);
+
 
 /**
  * @brief Execute Softmax layer
