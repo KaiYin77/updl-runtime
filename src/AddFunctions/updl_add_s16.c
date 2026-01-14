@@ -16,44 +16,49 @@
  * - Supports multiple input tensors for residual connections
  * - int16 activations with int16 outputs
  */
-uint8_t updl_add_s16(
-    int16_t **input_buffers, uint32_t num_inputs, int16_t *output,
-    uint32_t tensor_size,
-    atype_t activation,
-    int32_t eff_multiplier, int16_t eff_shift,
-    int16_t *input_zps, int16_t output_zp,
-    float *input_scales, float output_scale)
-{
-    if (!input_buffers || !output || num_inputs == 0) {
+uint8_t updl_add_s16(int16_t **input_buffers, uint32_t num_inputs, int16_t *output,
+                     uint32_t tensor_size, atype_t activation, int32_t eff_multiplier,
+                     int16_t eff_shift, int16_t *input_zps, int16_t output_zp,
+                     float *input_scales, float output_scale) {
+    (void)eff_multiplier; // Not used for Add
+    (void)eff_shift;
+
+    if (!input_buffers || !output || num_inputs == 0 || !input_scales ||
+        !input_zps || output_scale <= 0.0f) {
         return 1;
+    }
+
+    requant_params_t scale_params[4] = {0};
+    for (uint32_t inp = 0; inp < num_inputs && inp < 4; inp++) {
+        if (!input_buffers[inp]) {
+            continue;
+        }
+        float scale_ratio = input_scales[inp] / output_scale;
+        scale_params[inp] = updl_scale_to_multiplier_shift(scale_ratio);
     }
 
     for (uint32_t i = 0; i < tensor_size; i++) {
         int64_t sum = 0;
 
-        // Sum all input tensors with dequantization
         for (uint32_t inp = 0; inp < num_inputs; inp++) {
-            if (input_buffers[inp]) {
-                // Dequantize input: real_value = (quantized - zero_point) * scale
-                int32_t dequantized = ((int32_t)input_buffers[inp][i] - (int32_t)input_zps[inp]);
-
-                // Scale to output scale domain: dequantized * (input_scale / output_scale)
-                float scale_ratio = input_scales[inp] / output_scale;
-                int64_t scaled_value = (int64_t)(dequantized * scale_ratio);
-
-                sum += scaled_value;
-                sum = updl_udl_bound40(sum);
+            if (inp >= 4 || !input_buffers[inp]) {
+                continue;
             }
+
+            int32_t centered =
+                (int32_t)input_buffers[inp][i] - (int32_t)input_zps[inp];
+
+            int32_t scaled =
+                updl_requantize(centered, scale_params[inp].multiplier,
+                                scale_params[inp].shift);
+            sum += (int64_t)scaled;
+            sum = updl_udl_bound40(sum);
         }
 
-        // Requantize and apply activation
-        // For Add operations, no bias is typically used
-        int16_t bias_val = 0;
-        output[i] = updl_udl_finalize(
-            sum, bias_val, activation, eff_multiplier, eff_shift, output_zp,
-            1, 0); // No bias multiplier/shift for Add
+        int32_t activated = updl_activation(updl_clamp_s32(sum), activation);
+        int32_t with_zp = activated + (int32_t)output_zp;
+        output[i] = updl_clamp_s16(with_zp);
     }
 
     return 0;
 }
-
