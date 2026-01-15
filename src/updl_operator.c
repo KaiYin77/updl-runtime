@@ -196,7 +196,7 @@ updl_model_t *updl_load_model(updl_context_t *ctx, uint8_t *model_data) {
 
 updl_executor_t *updl_create_executor(const updl_model_t *model,
                                       updl_memory_pool_t *memory_pool) {
-  if (!model || !memory_pool) {
+  if (!model) {
     updl_Error("%s", "Invalid parameters for executor creation\n");
     return NULL;
   }
@@ -208,9 +208,13 @@ updl_executor_t *updl_create_executor(const updl_model_t *model,
   }
 
   // Allocate executor from context
-  updl_Debug(
-      "Creating executor: memory_pool=%p, memory_pool->max_buffer_size=%d\n",
-      (void *)memory_pool, memory_pool->max_buffer_size);
+  if (memory_pool) {
+    updl_Debug(
+        "Creating executor: memory_pool=%p, memory_pool->max_buffer_size=%d\n",
+        (void *)memory_pool, memory_pool->max_buffer_size);
+  } else {
+    updl_Debug("Creating executor: memory_pool=NULL\n");
+  }
 
   // Allocate executor from context (no more static limitation)
   updl_executor_t *executor = (updl_executor_t *)updl_alloc(ctx, sizeof(updl_executor_t));
@@ -378,7 +382,6 @@ int32_t updl_execute(updl_executor_t *executor, const void *input,
 
   updl_Debug("Execute starting: executor->memory_pool=%p, max_buffer_size=%d\n",
              (void *)pool, pool ? pool->max_buffer_size : 0);
-
   // Reset memory pool for fresh inference
   updl_reset_memory_pool(pool);
 
@@ -404,6 +407,10 @@ int32_t updl_execute(updl_executor_t *executor, const void *input,
   executor->state = rstate_running_soft;
 
   // Execute layers using dependency-based graph execution
+  for (size_t i = 0; i < model->num_layers; i++) {
+    executor->layer_completed[i] = false;
+  }
+
   size_t completed_layers = 0;
   while (completed_layers < model->num_layers) {
     bool made_progress = false;
