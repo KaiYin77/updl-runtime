@@ -98,6 +98,63 @@ const char *updl_get_layer_type_name(ltype_t type) {
   }
 }
 
+size_t updl_calc_shape_size(const uint16_t shape[4]) {
+  size_t size = 1;
+  for (int i = 0; i < 4; i++) {
+    if (shape[i] > 0) {
+      size *= shape[i];
+    }
+  }
+  return size;
+}
+
+size_t updl_get_layer_input_size(const updl_model_t *model,
+                                 const updl_executor_t *executor,
+                                 uint16_t layer_idx) {
+  if (executor && executor->exec_layers && layer_idx < model->num_layers) {
+    return executor->exec_layers[layer_idx].input_size;
+  }
+
+  if (model && layer_idx < model->num_layers) {
+    return updl_calc_shape_size(model->layers[layer_idx].input_shape);
+  }
+
+  return 0;
+}
+
+size_t updl_get_layer_output_size(const updl_model_t *model,
+                                  const updl_executor_t *executor,
+                                  uint16_t layer_idx) {
+  if (executor && executor->exec_layers && layer_idx < model->num_layers) {
+    return executor->exec_layers[layer_idx].output_size;
+  }
+
+  if (model && layer_idx < model->num_layers) {
+    return updl_calc_shape_size(model->layers[layer_idx].output_shape);
+  }
+
+  return 0;
+}
+
+int16_t *updl_get_or_alloc_int16_buffer(int16_t *buffer,
+                                        size_t buffer_size,
+                                        size_t required_size,
+                                        bool *free_flag) {
+  if (free_flag) {
+    *free_flag = false;
+  }
+
+  if (!buffer || (buffer_size > 0 && required_size > buffer_size)) {
+    int16_t *tmp = (int16_t *)malloc(required_size * sizeof(int16_t));
+    if (free_flag) {
+      *free_flag = (tmp != NULL);
+    }
+    return tmp;
+  }
+
+  return buffer;
+}
+
 int updl_execute_single_layer(updl_executor_t *executor, uint16_t layer_idx,
                               const int16_t *input_int16,
                               int16_t *output_int16) {
@@ -469,68 +526,62 @@ updl_test_run_layer_isolation(const updl_test_config_t *config,
   return result;
 }
 
-// Helper for capture callback
-typedef struct {
-  const updl_test_sample_t *sample;
-  updl_test_layer_result_t *layer_results;
-  bool verbose;
-  const updl_model_t *model;
-} layer_capture_context_t;
-
-static void layer_capture_callback(uint16_t layer_idx, const int16_t *output,
-                                   size_t output_size, void *user_data) {
-  layer_capture_context_t *ctx = (layer_capture_context_t *)user_data;
-  if (!ctx || !ctx->sample || !ctx->layer_results) {
+void updl_init_final_output_test_data(
+    const char *layer_name, uint16_t layer_index, const float *golden_data,
+    size_t output_size, const float *inputs_fp32, size_t input_size,
+    size_t num_samples, updl_test_layer_golden_t *layers,
+    updl_test_sample_t *samples) {
+  if (!layer_name || !golden_data || !inputs_fp32 || !layers || !samples) {
+    updl_Error("%s", "ERROR: NULL pointer in updl_init_final_output_test_data\n");
     return;
   }
 
-  // Find if this layer is one we want to test
-  for (size_t i = 0; i < ctx->sample->num_layers; i++) {
-    const updl_test_layer_golden_t *golden = &ctx->sample->layers[i];
+  for (size_t sample_idx = 0; sample_idx < num_samples; sample_idx++) {
+    updl_test_layer_golden_t *layer = &layers[sample_idx];
+    layer->layer_name = layer_name;
+    layer->layer_index = layer_index;
+    layer->output_golden_fp32 =
+        golden_data + (sample_idx * output_size);
+    layer->output_size = output_size;
 
-    if (golden->layer_index == layer_idx) {
-      // This is a layer we want to test - capture and compare
-      updl_test_layer_result_t *result = &ctx->layer_results[i];
-      result->layer_name = golden->layer_name;
-      result->layer_index = golden->layer_index;
-      result->passed = false;
-
-      if (ctx->verbose) {
-        updl_Info("  Testing Layer %d: %s\n", golden->layer_index,
-                  golden->layer_name);
-      }
-
-      // Get quantization parameters for this layer
-      const updl_layer_t *layer = &ctx->model->layers[layer_idx];
-      float output_scale = layer->act_scale;
-
-      // Compare with golden reference using shared validation utility
-      updl_validate_layer_output(
-          output, golden->output_golden_fp32, golden->output_size, output_scale,
-          ctx->verbose, golden->layer_name, &result->metrics);
-
-      // Store pass/fail status and feature counts
-      result->passed = (result->metrics.diff_2plus_bits == 0);
-      result->total_features = golden->output_size;
-      result->features_passed =
-          result->metrics.matched + result->metrics.diff_1bit;
-      result->features_failed = result->metrics.diff_2plus_bits;
-
-      break; // Found and processed this layer
-    }
+    samples[sample_idx].input_fp32 =
+        inputs_fp32 + (sample_idx * input_size);
+    samples[sample_idx].input_size = input_size;
+    samples[sample_idx].layers = layer;
+    samples[sample_idx].num_layers = 1;
   }
 }
 
-updl_test_sample_result_t
-updl_test_run_inference_with_capture(const updl_test_config_t *config,
-                                     const updl_test_sample_t *sample,
-                                     uint32_t sample_idx) {
+void updl_init_test_config(updl_test_config_t *config,
+                           const updl_test_sample_t *samples,
+                           size_t num_samples, int16_t *input_buffer,
+                           size_t input_buffer_size, int16_t *output_buffer,
+                           size_t output_buffer_size, updl_model_t *model,
+                           updl_executor_t *executor, bool verbose) {
+  if (!config) {
+    return;
+  }
 
+  memset(config, 0, sizeof(*config));
+  config->samples = samples;
+  config->num_samples = num_samples;
+  config->int16_input_buffer = input_buffer;
+  config->int16_input_buffer_size = input_buffer_size;
+  config->int16_output_buffer = output_buffer;
+  config->int16_output_buffer_size = output_buffer_size;
+  config->model = model;
+  config->executor = executor;
+  config->verbose = verbose;
+}
+
+updl_test_sample_result_t
+updl_test_run_isolation_sample(const updl_test_config_t *config,
+                               const updl_test_sample_t *sample,
+                               uint32_t sample_idx) {
   updl_test_sample_result_t sample_result = {0};
   sample_result.sample_index = sample_idx;
   sample_result.num_layers = sample->num_layers;
 
-  // Allocate layer results
   sample_result.layer_results = (updl_test_layer_result_t *)calloc(
       sample->num_layers, sizeof(updl_test_layer_result_t));
   if (!sample_result.layer_results) {
@@ -538,96 +589,135 @@ updl_test_run_inference_with_capture(const updl_test_config_t *config,
     return sample_result;
   }
 
-  // Quantize input from fp32 to int16
-  // Use the shared input buffer from config if available, otherwise malloc
-  int16_t *input_int16 = config->int16_input_buffer;
-  bool free_input = false;
+  for (size_t j = 0; j < sample->num_layers; j++) {
+    const updl_test_layer_golden_t *layer_golden = &sample->layers[j];
+    const float *layer_input_fp32 =
+        (layer_golden->layer_index == 0) ? sample->input_fp32
+                                         : layer_golden->input_golden_fp32;
 
-  if (!input_int16) {
-    input_int16 = (int16_t *)malloc(sample->input_size * sizeof(int16_t));
-    free_input = true;
-  }
+    updl_test_layer_result_t result = updl_test_run_layer_isolation(
+        config, layer_golden, layer_input_fp32);
 
-  if (!input_int16) {
-    updl_Error("%s",
-               "ERROR: Memory allocation failed for input quantization\n");
-    free(sample_result.layer_results);
-    sample_result.layer_results = NULL;
-    return sample_result;
-  }
+    sample_result.layer_results[j] = result;
 
-  // Get input quantization parameters from model
-  float input_scale = config->model->input_scale;
-  int16_t input_zp = 0; // Typically 0 for inputs
-
-  updl_quantize_fp32_array(sample->input_fp32, input_int16, sample->input_size,
-                           input_scale, input_zp);
-
-  // Allocate output buffer
-  // Use shared output buffer if available
-  int16_t *output_int16 = config->int16_output_buffer;
-  bool free_output = false;
-
-  // Get output size from last layer
-  size_t output_size = config->model->layers[config->model->num_layers - 1]
-                           .output_shape[1]; // Assuming [batch, classes]
-
-  if (!output_int16) {
-    output_int16 = (int16_t *)malloc(output_size * sizeof(int16_t));
-    free_output = true;
-  }
-
-  if (!output_int16) {
-    updl_Error("%s", "ERROR: Memory allocation failed for output buffer\n");
-    if (free_input)
-      free(input_int16);
-    free(sample_result.layer_results);
-    sample_result.layer_results = NULL;
-    return sample_result;
-  }
-
-  // Set up callback context for layer capture
-  layer_capture_context_t capture_ctx = {.sample = sample,
-                                         .layer_results =
-                                             sample_result.layer_results,
-                                         .verbose = config->verbose,
-                                         .model = config->model};
-
-  // Register callback to capture layer outputs during inference
-  updl_set_layer_callback(config->executor, layer_capture_callback,
-                          &capture_ctx);
-
-  // Run inference (callback will be called for each layer)
-  int result = updl_execute(config->executor, input_int16, output_int16);
-
-  // Unregister callback
-  updl_set_layer_callback(config->executor, NULL, NULL);
-
-  if (result != 0) {
-    updl_Error("ERROR: updl_execute failed with error %d for sample %u\n",
-               result, sample_idx);
-    if (free_input)
-      free(input_int16);
-    if (free_output)
-      free(output_int16);
-    free(sample_result.layer_results);
-    sample_result.layer_results = NULL;
-    return sample_result;
-  }
-
-  // Count passed/failed layers (callback already populated results)
-  for (size_t i = 0; i < sample->num_layers; i++) {
-    if (sample_result.layer_results[i].passed) {
+    if (result.passed) {
       sample_result.layers_passed++;
     } else {
       sample_result.layers_failed++;
     }
   }
 
-  if (free_input)
+  return sample_result;
+}
+
+updl_test_sample_result_t
+updl_test_run_final_output(const updl_test_config_t *config,
+                           const updl_test_sample_t *sample,
+                           uint32_t sample_idx) {
+  updl_test_sample_result_t sample_result = {0};
+  sample_result.sample_index = sample_idx;
+  sample_result.num_layers = 1;
+
+  if (sample->num_layers == 0) {
+    updl_Error("ERROR: No layers configured for sample %d\n", (int)sample_idx);
+    return sample_result;
+  }
+
+  const updl_test_layer_golden_t *golden =
+      &sample->layers[sample->num_layers - 1];
+
+  sample_result.layer_results =
+      (updl_test_layer_result_t *)calloc(1, sizeof(updl_test_layer_result_t));
+  if (!sample_result.layer_results) {
+    updl_Error("%s", "ERROR: Memory allocation failed for layer results\n");
+    return sample_result;
+  }
+
+  size_t input_size =
+      updl_get_layer_input_size(config->model, config->executor, 0);
+  if (input_size == 0 || sample->input_size < input_size) {
+    updl_Error("ERROR: Invalid input size for sample %d\n",
+               (int)sample_idx);
+    free(sample_result.layer_results);
+    sample_result.layer_results = NULL;
+    return sample_result;
+  }
+
+  bool free_input = false;
+  int16_t *input_int16 = updl_get_or_alloc_int16_buffer(
+      config->int16_input_buffer, config->int16_input_buffer_size, input_size,
+      &free_input);
+
+  if (!input_int16) {
+    updl_Error("ERROR: Memory allocation failed for sample %d input\n",
+               (int)sample_idx);
+    free(sample_result.layer_results);
+    sample_result.layer_results = NULL;
+    return sample_result;
+  }
+
+  updl_quantize_fp32_array(sample->input_fp32, input_int16, input_size,
+                           config->model->input_scale, 0);
+
+  size_t output_size = updl_get_layer_output_size(
+      config->model, config->executor, config->model->num_layers - 1);
+  bool free_output = false;
+  int16_t *output_int16 = updl_get_or_alloc_int16_buffer(
+      config->int16_output_buffer, config->int16_output_buffer_size,
+      output_size, &free_output);
+
+  if (!output_int16) {
+    updl_Error("ERROR: Memory allocation failed for sample %d output\n",
+               (int)sample_idx);
+    if (free_input) {
+      free(input_int16);
+    }
+    free(sample_result.layer_results);
+    sample_result.layer_results = NULL;
+    return sample_result;
+  }
+
+  int exec_result = updl_execute(config->executor, input_int16, output_int16);
+  if (exec_result != 0) {
+    updl_Error("ERROR: updl_execute failed for sample %d\n", (int)sample_idx);
+    if (free_input) {
+      free(input_int16);
+    }
+    if (free_output) {
+      free(output_int16);
+    }
+    free(sample_result.layer_results);
+    sample_result.layer_results = NULL;
+    return sample_result;
+  }
+
+  updl_test_layer_result_t *layer_result = &sample_result.layer_results[0];
+  layer_result->layer_name = golden->layer_name;
+  layer_result->layer_index = golden->layer_index;
+
+  float output_scale = config->model->layers[golden->layer_index].act_scale;
+  bool passed = updl_validate_layer_output(
+      output_int16, golden->output_golden_fp32, golden->output_size, output_scale,
+      config->verbose, golden->layer_name, &layer_result->metrics);
+
+  layer_result->passed = passed;
+  layer_result->total_features = golden->output_size;
+  layer_result->features_passed =
+      layer_result->metrics.matched + layer_result->metrics.diff_1bit;
+  layer_result->features_failed = layer_result->metrics.diff_2plus_bits;
+
+  if (passed) {
+    sample_result.layers_passed = 1;
+  } else {
+    sample_result.layers_failed = 1;
+  }
+
+  if (free_input) {
     free(input_int16);
-  if (free_output)
+  }
+  if (free_output) {
     free(output_int16);
+  }
 
   return sample_result;
 }

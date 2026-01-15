@@ -45,6 +45,12 @@ typedef struct {
   const updl_impl_test_input_t *test_inputs; // Array of test inputs
   size_t num_test_inputs;                    // Number of test inputs
 
+  // Optional reusable buffers (provide to avoid malloc)
+  int16_t *buffer_hw;
+  int16_t *buffer_sw;
+  int16_t *buffer_temp;
+  size_t buffer_size; // in int16 elements
+
   bool verbose; // Print detailed comparison for each layer
 } updl_impl_test_config_t;
 
@@ -62,49 +68,13 @@ typedef struct {
 // ============================================================================
 
 /**
- * Compare two int16 arrays element-by-element and report statistics
- *
- * Prints first 5 values of each buffer, counts mismatches, finds max
- * difference, and reports the result. Updates the matched/mismatched counters.
- *
- * @param layer_name  Name of the layer being compared
- * @param layer_idx   Index of the layer
- * @param hw_output   Hardware/UDL output buffer
- * @param sw_output   Software output buffer
- * @param size        Number of elements to compare
- * @param matched     Pointer to counter for matched layers (incremented if all
- * match)
- * @param mismatched  Pointer to counter for mismatched layers (incremented if
- * any mismatch)
+ * Initialize implementation test configuration
  */
-void updl_compare_int16_arrays(const char *layer_name, uint16_t layer_idx,
-                               const int16_t *hw_output,
-                               const int16_t *sw_output, size_t size,
-                               uint32_t *matched, uint32_t *mismatched);
-
-/**
- * Get layer type name as string
- *
- * @param type  Layer type enum
- * @return      String representation of layer type
- */
-const char *updl_get_layer_type_name(ltype_t type);
-
-/**
- * Execute a single layer with specified mode (UDL or SW)
- *
- * The executor state (rstate_running_hard or rstate_running_soft) must be set
- * by the caller before calling this function.
- *
- * @param executor     UPDL executor (state must be set by caller)
- * @param layer_idx    Layer index to execute
- * @param layer_input  Input buffer for the layer
- * @param layer_output Output buffer for the layer
- * @return             0 on success, negative on error
- */
-int updl_execute_single_layer(updl_executor_t *executor, uint16_t layer_idx,
-                               const int16_t *layer_input,
-                               int16_t *layer_output);
+void updl_init_impl_test_config(
+    updl_impl_test_config_t *config, updl_model_t *model,
+    updl_executor_t *executor, const updl_impl_test_input_t *test_inputs,
+    size_t num_test_inputs, int16_t *buffer_hw, int16_t *buffer_sw,
+    int16_t *buffer_temp, size_t buffer_size, bool verbose);
 
 // ============================================================================
 // HIGH-LEVEL TEST RUNNER

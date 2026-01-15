@@ -95,6 +95,33 @@ typedef struct {
 const char *updl_get_layer_type_name(ltype_t type);
 
 /**
+ * Calculate total element count from a 4D shape
+ */
+size_t updl_calc_shape_size(const uint16_t shape[4]);
+
+/**
+ * Get layer input size (prefers executor metadata when available)
+ */
+size_t updl_get_layer_input_size(const updl_model_t *model,
+                                 const updl_executor_t *executor,
+                                 uint16_t layer_idx);
+
+/**
+ * Get layer output size (prefers executor metadata when available)
+ */
+size_t updl_get_layer_output_size(const updl_model_t *model,
+                                  const updl_executor_t *executor,
+                                  uint16_t layer_idx);
+
+/**
+ * Use provided buffer or allocate a temporary one if needed
+ */
+int16_t *updl_get_or_alloc_int16_buffer(int16_t *buffer,
+                                        size_t buffer_size,
+                                        size_t required_size,
+                                        bool *free_flag);
+
+/**
  * Execute a single layer in isolation
  *
  * @param executor     UPDL executor
@@ -266,16 +293,56 @@ updl_test_layer_result_t updl_test_run_layer_isolation(
     const float *input_fp32);
 
 /**
- * Run a full inference test with layer capture
- * 
+ * Initialize per-sample final output test data
+ *
+ * @param layer_name   Layer name to validate
+ * @param layer_index  Layer index in model
+ * @param golden_data  Golden output data [num_samples][output_size]
+ * @param output_size  Output size per sample
+ * @param inputs_fp32  Model input data [num_samples][input_size]
+ * @param input_size   Model input size per sample
+ * @param num_samples  Number of samples
+ * @param layers       Output: per-sample layer golden refs [num_samples][1]
+ * @param samples      Output: test samples array [num_samples]
+ */
+void updl_init_final_output_test_data(
+    const char *layer_name, uint16_t layer_index, const float *golden_data,
+    size_t output_size, const float *inputs_fp32, size_t input_size,
+    size_t num_samples, updl_test_layer_golden_t *layers,
+    updl_test_sample_t *samples);
+
+/**
+ * Initialize unified test config
+ */
+void updl_init_test_config(updl_test_config_t *config,
+                           const updl_test_sample_t *samples,
+                           size_t num_samples, int16_t *input_buffer,
+                           size_t input_buffer_size, int16_t *output_buffer,
+                           size_t output_buffer_size, updl_model_t *model,
+                           updl_executor_t *executor, bool verbose);
+
+/**
+ * Run all isolation tests for a single sample
+ *
  * @param config       Test configuration
  * @param sample       Test sample
  * @param sample_idx   Sample index
  * @return             Sample test result
  */
-updl_test_sample_result_t updl_test_run_inference_with_capture(
-    const updl_test_config_t *config,
-    const updl_test_sample_t *sample,
+updl_test_sample_result_t updl_test_run_isolation_sample(
+    const updl_test_config_t *config, const updl_test_sample_t *sample,
+    uint32_t sample_idx);
+
+/**
+ * Run full inference for a sample and validate final output
+ *
+ * @param config       Test configuration
+ * @param sample       Test sample
+ * @param sample_idx   Sample index
+ * @return             Sample test result
+ */
+updl_test_sample_result_t updl_test_run_final_output(
+    const updl_test_config_t *config, const updl_test_sample_t *sample,
     uint32_t sample_idx);
 
 /**

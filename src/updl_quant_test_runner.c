@@ -87,6 +87,30 @@ void updl_init_quant_test_data(const updl_layer_quant_config_t *layer_configs,
   }
 }
 
+void updl_init_quant_test_config(
+    updl_quant_test_config_t *config, const updl_quant_test_sample_t *samples,
+    size_t num_samples, int16_t *input_buffer, size_t input_buffer_size,
+    int16_t *output_buffer, size_t output_buffer_size,
+    int16_t *golden_buffer, size_t golden_buffer_size, updl_model_t *model,
+    updl_executor_t *executor, bool verbose) {
+  if (!config) {
+    return;
+  }
+
+  memset(config, 0, sizeof(*config));
+  config->samples = samples;
+  config->num_samples = num_samples;
+  config->int16_input_buffer = input_buffer;
+  config->int16_input_buffer_size = input_buffer_size;
+  config->int16_output_buffer = output_buffer;
+  config->int16_output_buffer_size = output_buffer_size;
+  config->int16_golden_buffer = golden_buffer;
+  config->int16_golden_buffer_size = golden_buffer_size;
+  config->model = model;
+  config->executor = executor;
+  config->verbose = verbose;
+}
+
 updl_quant_test_report_t *
 updl_run_quantization_tests(const updl_quant_test_config_t *config) {
   if (!config || !config->samples || !config->model || !config->executor) {
@@ -151,50 +175,58 @@ updl_run_quantization_tests(const updl_quant_test_config_t *config) {
       updl_Info("Sample %d/%d:\n", (int)(i + 1), (int)config->num_samples);
     }
 
-    for (size_t j = 0; j < sample->num_layers; j++) {
-        const updl_layer_quant_golden_t *layer_golden = &sample->layers[j];
-        
-        // Map to unified layer golden struct
-        updl_test_layer_golden_t unified_golden = {
-            .layer_name = layer_golden->layer_name,
-            .layer_index = layer_golden->layer_index,
-            .input_golden_fp32 = layer_golden->input_golden_fp32,
-            .input_size = layer_golden->input_size,
-            .second_input_golden_fp32 = layer_golden->second_input_golden_fp32,
-            .second_input_size = layer_golden->second_input_size,
-            .num_inputs = layer_golden->num_inputs,
-            .output_golden_fp32 = layer_golden->output_golden_fp32,
-            .output_size = layer_golden->output_size
-        };
-        
-        // Determine input for this layer
-        const float *layer_input_fp32;
-        if (layer_golden->layer_index == 0) {
-          // First layer uses model input
-          layer_input_fp32 = sample->model_input_fp32;
-        } else {
-          // Other layers use their golden input
-          layer_input_fp32 = layer_golden->input_golden_fp32;
-        }
-        
-        // Run shared isolation test
-        updl_test_layer_result_t result = updl_test_run_layer_isolation(
-            &unified_config, &unified_golden, layer_input_fp32);
-            
-        // Map result back
-        sample_result->layer_results[j].layer_name = result.layer_name;
-        sample_result->layer_results[j].layer_index = result.layer_index;
-        sample_result->layer_results[j].passed = result.passed;
-        sample_result->layer_results[j].total_features = result.total_features;
-        sample_result->layer_results[j].features_passed = result.features_passed;
-        sample_result->layer_results[j].features_failed = result.features_failed;
-        
-        if (result.passed) {
-            sample_result->layers_passed++;
-        } else {
-            sample_result->layers_failed++;
-        }
+    updl_test_layer_golden_t *unified_layers =
+        (updl_test_layer_golden_t *)calloc(sample->num_layers,
+                                           sizeof(updl_test_layer_golden_t));
+    if (!unified_layers) {
+      updl_Error("%s", "ERROR: Memory allocation failed for layer goldens\n");
+      continue;
     }
+
+    for (size_t j = 0; j < sample->num_layers; j++) {
+      const updl_layer_quant_golden_t *layer_golden = &sample->layers[j];
+      unified_layers[j].layer_name = layer_golden->layer_name;
+      unified_layers[j].layer_index = layer_golden->layer_index;
+      unified_layers[j].input_golden_fp32 = layer_golden->input_golden_fp32;
+      unified_layers[j].input_size = layer_golden->input_size;
+      unified_layers[j].second_input_golden_fp32 =
+          layer_golden->second_input_golden_fp32;
+      unified_layers[j].second_input_size = layer_golden->second_input_size;
+      unified_layers[j].num_inputs = layer_golden->num_inputs;
+      unified_layers[j].output_golden_fp32 = layer_golden->output_golden_fp32;
+      unified_layers[j].output_size = layer_golden->output_size;
+    }
+
+    updl_test_sample_t unified_sample = {
+        .input_fp32 = sample->model_input_fp32,
+        .input_size = sample->model_input_size,
+        .layers = unified_layers,
+        .num_layers = sample->num_layers};
+
+    updl_test_sample_result_t unified_result =
+        updl_test_run_isolation_sample(&unified_config, &unified_sample,
+                                       (uint32_t)i);
+
+    if (!unified_result.layer_results) {
+      free(unified_layers);
+      continue;
+    }
+
+    for (size_t j = 0; j < sample->num_layers; j++) {
+      const updl_test_layer_result_t *result = &unified_result.layer_results[j];
+      sample_result->layer_results[j].layer_name = result->layer_name;
+      sample_result->layer_results[j].layer_index = result->layer_index;
+      sample_result->layer_results[j].passed = result->passed;
+      sample_result->layer_results[j].total_features = result->total_features;
+      sample_result->layer_results[j].features_passed = result->features_passed;
+      sample_result->layer_results[j].features_failed = result->features_failed;
+    }
+
+    sample_result->layers_passed = unified_result.layers_passed;
+    sample_result->layers_failed = unified_result.layers_failed;
+
+    free(unified_result.layer_results);
+    free(unified_layers);
   }
 
   return report;

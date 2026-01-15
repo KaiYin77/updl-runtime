@@ -42,6 +42,27 @@ static bool updl_layer_has_hw_support(ltype_t type) {
   }
 }
 
+void updl_init_impl_test_config(
+    updl_impl_test_config_t *config, updl_model_t *model,
+    updl_executor_t *executor, const updl_impl_test_input_t *test_inputs,
+    size_t num_test_inputs, int16_t *buffer_hw, int16_t *buffer_sw,
+    int16_t *buffer_temp, size_t buffer_size, bool verbose) {
+  if (!config) {
+    return;
+  }
+
+  memset(config, 0, sizeof(*config));
+  config->model = model;
+  config->executor = executor;
+  config->test_inputs = test_inputs;
+  config->num_test_inputs = num_test_inputs;
+  config->buffer_hw = buffer_hw;
+  config->buffer_sw = buffer_sw;
+  config->buffer_temp = buffer_temp;
+  config->buffer_size = buffer_size;
+  config->verbose = verbose;
+}
+
 // ============================================================================
 // HIGH-LEVEL TEST RUNNER
 // ============================================================================
@@ -84,18 +105,33 @@ updl_run_implementation_tests(const updl_impl_test_config_t *config) {
             (3 * max_layer_size * sizeof(int16_t)) / 1024.0f);
   updl_Info("\n");
 
-  // Allocate 3 buffers: UDL state, SW state, and temporary output
-  int16_t *buffer_hw = (int16_t *)malloc(max_layer_size * sizeof(int16_t));
-  int16_t *buffer_sw = (int16_t *)malloc(max_layer_size * sizeof(int16_t));
-  int16_t *buffer_temp = (int16_t *)malloc(max_layer_size * sizeof(int16_t));
+  int16_t *buffer_hw = config->buffer_hw;
+  int16_t *buffer_sw = config->buffer_sw;
+  int16_t *buffer_temp = config->buffer_temp;
+  bool free_buffers = false;
 
-  if (!buffer_hw || !buffer_sw || !buffer_temp) {
-    updl_Error("ERROR: Failed to allocate buffers (need %.1f KB)\n",
-               (3 * max_layer_size * sizeof(int16_t)) / 1024.0f);
-    free(buffer_hw);
-    free(buffer_sw);
-    free(buffer_temp);
-    return stats;
+  if (buffer_hw && buffer_sw && buffer_temp) {
+    if (config->buffer_size < max_layer_size) {
+      updl_Error(
+          "ERROR: Provided buffers too small (%d < %d int16 elements)\n",
+          (int)config->buffer_size, (int)max_layer_size);
+      return stats;
+    }
+  } else {
+    // Allocate 3 buffers: UDL state, SW state, and temporary output
+    buffer_hw = (int16_t *)malloc(max_layer_size * sizeof(int16_t));
+    buffer_sw = (int16_t *)malloc(max_layer_size * sizeof(int16_t));
+    buffer_temp = (int16_t *)malloc(max_layer_size * sizeof(int16_t));
+    free_buffers = true;
+
+    if (!buffer_hw || !buffer_sw || !buffer_temp) {
+      updl_Error("ERROR: Failed to allocate buffers (need %.1f KB)\n",
+                 (3 * max_layer_size * sizeof(int16_t)) / 1024.0f);
+      free(buffer_hw);
+      free(buffer_sw);
+      free(buffer_temp);
+      return stats;
+    }
   }
 
   // Test each input sample
@@ -236,9 +272,11 @@ updl_run_implementation_tests(const updl_impl_test_config_t *config) {
   updl_Info("========================================\n");
 
   // Cleanup
-  free(buffer_hw);
-  free(buffer_sw);
-  free(buffer_temp);
+  if (free_buffers) {
+    free(buffer_hw);
+    free(buffer_sw);
+    free(buffer_temp);
+  }
 
   // Reset executor to default state
   executor->state = rstate_idle;

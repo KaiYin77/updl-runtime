@@ -148,6 +148,16 @@ void updl_init_quant_test_data(const updl_layer_quant_config_t *layer_configs,
                                updl_quant_test_sample_t *quant_samples);
 
 /**
+ * Initialize quant test configuration
+ */
+void updl_init_quant_test_config(
+    updl_quant_test_config_t *config, const updl_quant_test_sample_t *samples,
+    size_t num_samples, int16_t *input_buffer, size_t input_buffer_size,
+    int16_t *output_buffer, size_t output_buffer_size,
+    int16_t *golden_buffer, size_t golden_buffer_size, updl_model_t *model,
+    updl_executor_t *executor, bool verbose);
+
+/**
  * Free quantization test configuration
  *
  * @param config  Configuration to free
